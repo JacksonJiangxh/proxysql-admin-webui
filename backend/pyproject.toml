@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[project]
+name = "proxysql-admin-webui"
+version = "1.0.0"
+description = "Web-based management interface for ProxySQL"
+requires-python = ">=3.10"

@@ -1,0 +1,340 @@
+# .cnb.yml — ProxySQL Admin WebUI CI/CD
+#
+# 流水线：
+#   1. 云原生开发 (vscode)   — 远程开发环境
+#   2. 发布     (tag_push)   — 双架构二进制 + 多架构 Docker + CNB Release
+#
+# 架构说明：
+#   CNB 同时支持 amd64 (cnb:arch:amd64) 和 arm64 (cnb:arch:arm64:v8) runner。
+#   Docker 多架构：amd64/arm64 各自原生 docker build，再由 manifest 合并。
+#
+# 触发规则：
+#   - push tag → 构建双架构二进制 + 多架构 Docker + CNB Release
+
+# =========================================================================
+# 公共配置（YAML 锚点复用）
+# =========================================================================
+.build-amd64: &build-amd64
+  docker:
+    image: docker.cnb.cool/xzydm/mirrors/debian:13-all
+  runner:
+    cpus: 4
+    tags: cnb:arch:amd64
+
+.build-arm64: &build-arm64
+  docker:
+    image: docker.cnb.cool/xzydm/mirrors/debian:13-all
+  runner:
+    cpus: 4
+    tags: cnb:arch:arm64:v8
+
+.docker-amd64: &docker-amd64
+  <<: *build-amd64
+  services:
+    - docker
+
+.docker-arm64: &docker-arm64
+  <<: *build-arm64
+  services:
+    - docker
+
+# Release 描述（多 job 复用）
+.release-desc: &release-desc |
+  ## ProxySQL Admin WebUI ${TAG_NAME}
+
+  ### 🚀 单文件部署包（无需安装 Python / Node / Docker）
+
+  | 架构 | 文件 |
+  |------|------|
+  | linux/amd64 | `proxysql-admin-webui-${VERSION}-linux-amd64.tar.gz` |
+  | linux/arm64 | `proxysql-admin-webui-${VERSION}-linux-arm64.tar.gz` |
+
+  ```bash
+  # 下载对应架构 → 解压 → 运行
+  tar -xzf proxysql-admin-webui-${VERSION}-linux-amd64.tar.gz
+  ./proxysql-admin-webui --host 0.0.0.0 --port 8080
+  ```
+
+  ### 🐳 Docker 镜像（多架构 amd64 + arm64）
+
+  ```bash
+  docker pull docker.cnb.cool/xzydm/proxysql-admin-webui:${VERSION}
+  ```
+
+  > Docker CLI 自动选择与当前宿主机匹配的架构镜像。
+
+  ### 📦 Docker Compose 一键部署
+
+  ```bash
+  cp .env.example .env
+  vim .env  # 修改 SECRET_KEY 和 FERNET_KEY
+  docker compose up -d
+  ```
+
+  ### 📖 用户手册
+  https://jacksonjiangxh.github.io/proxysql-admin-webui/
+
+# =========================================================================
+# $ 兜底分支：仓库级事件
+# =========================================================================
+$:
+
+  # =========================================================================
+  # 1. 云原生开发 (vscode 事件)
+  # =========================================================================
+  vscode:
+    - name: dev-env
+      <<: *docker-amd64
+      services:
+        - docker
+        - name: vscode
+          options:
+            onlyPreview: false
+            launch: python -m http.server 8686 --bind 0.0.0.0
+            keepAliveTimeout: 1h
+            daemon: true
+            backup: false
+
+  # =========================================================================
+  # 2. 发布 (tag_push)
+  # =========================================================================
+  tag_push:
+
+    # ═══════════════════════════════════════════════════════════════
+    # PyInstaller 包 — AMD64
+    # 1. git:release 确保 Release 元数据正确  2. cnbcool/attachments 上传文件
+    # ═══════════════════════════════════════════════════════════════
+    - name: pkg-amd64
+      <<: *build-amd64
+      stages:
+        - name: build
+          script: |
+            set -e
+            TAG="${CNB_BRANCH#v}"
+            echo "##[set-output VERSION=${TAG}]"
+            echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
+            echo "🔨 Building proxysql-admin-webui ${TAG} (linux/amd64) …"
+
+            cd frontend
+            npm ci
+            npm run build
+            test -f dist/index.html || { echo "❌ Frontend build failed"; exit 1; }
+            cd ..
+
+            pip install -q -r backend/requirements.txt pyinstaller
+
+            pyinstaller \
+              --onefile \
+              --name "proxysql-admin-webui" \
+              --add-data "frontend/dist:frontend/dist" \
+              --hidden-import uvicorn.logging \
+              --hidden-import uvicorn.loops.auto \
+              --hidden-import uvicorn.protocols.http.auto \
+              backend/run.py
+
+            ls -lh dist/proxysql-admin-webui
+            echo "✅ Build OK (linux/amd64)"
+
+            ARCHIVE="proxysql-admin-webui-${TAG}-linux-amd64.tar.gz"
+            tar -czf "${ARCHIVE}" -C dist proxysql-admin-webui
+            sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
+            echo "📦 ${ARCHIVE} ($(du -h ${ARCHIVE} | cut -f1))"
+          exports:
+            VERSION: VERSION
+            TAG_NAME: TAG_NAME
+
+        - name: ensure-release
+          type: git:release
+          options:
+            overlying: true
+            title: ProxySQL Admin WebUI ${TAG_NAME}
+            description: *release-desc
+            preRelease: false
+
+        - name: upload
+          image: cnbcool/attachments
+          settings:
+            attachments:
+              - ./proxysql-admin-webui-${VERSION}-linux-amd64.tar.gz
+              - ./proxysql-admin-webui-${VERSION}-linux-amd64.tar.gz.sha256
+
+    # ═══════════════════════════════════════════════════════════════
+    # PyInstaller 包 — ARM64
+    # 1. git:release 确保 Release 元数据正确  2. cnbcool/attachments 上传文件
+    # ═══════════════════════════════════════════════════════════════
+    - name: pkg-arm64
+      <<: *build-arm64
+      stages:
+        - name: build
+          script: |
+            set -e
+            TAG="${CNB_BRANCH#v}"
+            echo "##[set-output VERSION=${TAG}]"
+            echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
+            echo "🔨 Building proxysql-admin-webui ${TAG} (linux/arm64) …"
+
+            cd frontend
+            npm ci
+            npm run build
+            test -f dist/index.html || { echo "❌ Frontend build failed"; exit 1; }
+            cd ..
+
+            pip install -q -r backend/requirements.txt pyinstaller
+
+            pyinstaller \
+              --onefile \
+              --name "proxysql-admin-webui" \
+              --add-data "frontend/dist:frontend/dist" \
+              --hidden-import uvicorn.logging \
+              --hidden-import uvicorn.loops.auto \
+              --hidden-import uvicorn.protocols.http.auto \
+              backend/run.py
+
+            ls -lh dist/proxysql-admin-webui
+            echo "✅ Build OK (linux/arm64)"
+
+            ARCHIVE="proxysql-admin-webui-${TAG}-linux-arm64.tar.gz"
+            tar -czf "${ARCHIVE}" -C dist proxysql-admin-webui
+            sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
+            echo "📦 ${ARCHIVE} ($(du -h ${ARCHIVE} | cut -f1))"
+          exports:
+            VERSION: VERSION
+            TAG_NAME: TAG_NAME
+
+        - name: ensure-release
+          type: git:release
+          options:
+            overlying: true
+            title: ProxySQL Admin WebUI ${TAG_NAME}
+            description: *release-desc
+            preRelease: false
+
+        - name: upload
+          image: cnbcool/attachments
+          settings:
+            attachments:
+              - ./proxysql-admin-webui-${VERSION}-linux-arm64.tar.gz
+              - ./proxysql-admin-webui-${VERSION}-linux-arm64.tar.gz.sha256
+
+    # ═══════════════════════════════════════════════════════════════
+    # Docker AMD64 原生构建
+    # ═══════════════════════════════════════════════════════════════
+    - name: docker-amd64
+      <<: *docker-amd64
+      stages:
+        - name: extract-version
+          script: |
+            TAG="${CNB_BRANCH#v}"
+            echo "##[set-output VERSION=${TAG}]"
+            echo "##[set-output VERSION_MAJOR=${TAG%%.*}]"
+            echo "##[set-output VERSION_MINOR=${TAG%.*}]"
+            echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
+          exports:
+            VERSION: VERSION
+            VERSION_MAJOR: VERSION_MAJOR
+            VERSION_MINOR: VERSION_MINOR
+            TAG_NAME: TAG_NAME
+
+        - name: build-and-push
+          script: |
+            set -e
+            IMAGE="docker.cnb.cool/xzydm/proxysql-admin-webui"
+            echo "🔨 Building Docker image (linux/amd64) …"
+            docker build -t "${IMAGE}:${VERSION}-amd64" -f Dockerfile .
+            echo "📤 Pushing ${IMAGE}:${VERSION}-amd64 …"
+            docker push "${IMAGE}:${VERSION}-amd64"
+            echo "✅ amd64 image pushed"
+
+    # ═══════════════════════════════════════════════════════════════
+    # Docker ARM64 原生构建
+    # ═══════════════════════════════════════════════════════════════
+    - name: docker-arm64
+      <<: *docker-arm64
+      stages:
+        - name: extract-version
+          script: |
+            TAG="${CNB_BRANCH#v}"
+            echo "##[set-output VERSION=${TAG}]"
+            echo "##[set-output VERSION_MAJOR=${TAG%%.*}]"
+            echo "##[set-output VERSION_MINOR=${TAG%.*}]"
+            echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
+          exports:
+            VERSION: VERSION
+            VERSION_MAJOR: VERSION_MAJOR
+            VERSION_MINOR: VERSION_MINOR
+            TAG_NAME: TAG_NAME
+
+        - name: build-and-push
+          script: |
+            set -e
+            IMAGE="docker.cnb.cool/xzydm/proxysql-admin-webui"
+            echo "🔨 Building Docker image (linux/arm64) …"
+            docker build -t "${IMAGE}:${VERSION}-arm64" -f Dockerfile .
+            echo "📤 Pushing ${IMAGE}:${VERSION}-arm64 …"
+            docker push "${IMAGE}:${VERSION}-arm64"
+            echo "✅ arm64 image pushed"
+
+    # ═══════════════════════════════════════════════════════════════
+    # 最终门禁 — 等待 Docker 镜像就绪后：
+    #   1. 合并多架构 manifest
+    #   2. 更新 Release 描述（Release 由 tag push 自动创建，只更新不新建）
+    # ═══════════════════════════════════════════════════════════════
+    - name: publish
+      <<: *docker-amd64
+      stages:
+        - name: extract-version
+          script: |
+            TAG="${CNB_BRANCH#v}"
+            echo "##[set-output VERSION=${TAG}]"
+            echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
+          exports:
+            VERSION: VERSION
+            TAG_NAME: TAG_NAME
+
+        - name: wait-docker
+          script: |
+            set -e
+            IMAGE="docker.cnb.cool/xzydm/proxysql-admin-webui"
+
+            echo "⏳ Waiting for amd64 & arm64 Docker images …"
+            for i in $(seq 1 30); do
+              AMD64_OK=0
+              ARM64_OK=0
+              docker manifest inspect "${IMAGE}:${VERSION}-amd64" >/dev/null 2>&1 && AMD64_OK=1 || true
+              docker manifest inspect "${IMAGE}:${VERSION}-arm64" >/dev/null 2>&1 && ARM64_OK=1 || true
+              if [ "${AMD64_OK}" = "1" ] && [ "${ARM64_OK}" = "1" ]; then
+                echo "✅ Both arch Docker images available"
+                break
+              fi
+              echo "   attempt ${i}/30: amd64=${AMD64_OK} arm64=${ARM64_OK}, retrying in 10s …"
+              sleep 10
+            done
+
+        - name: merge-manifest
+          script: |
+            set -e
+            IMAGE="docker.cnb.cool/xzydm/proxysql-admin-webui"
+
+            TAG_LIST="${VERSION}"
+            if ! echo "${TAG_NAME}" | grep -qE '(rc|beta|alpha)'; then
+              TAG_LIST="${TAG_LIST} latest"
+            fi
+
+            for TAG in ${TAG_LIST}; do
+              echo "📦 Creating multi-arch manifest ${IMAGE}:${TAG} …"
+              docker buildx imagetools create \
+                -t "${IMAGE}:${TAG}" \
+                "${IMAGE}:${VERSION}-amd64" \
+                "${IMAGE}:${VERSION}-arm64"
+              echo "✅ ${IMAGE}:${TAG} (amd64 + arm64)"
+            done
+
+            echo "✅ All Docker multi-arch manifests pushed"
+
+        - name: update-release
+          type: git:release
+          options:
+            overlying: true
+            title: ProxySQL Admin WebUI ${TAG_NAME}
+            description: *release-desc
+            preRelease: false

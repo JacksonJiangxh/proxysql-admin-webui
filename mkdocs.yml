@@ -1,0 +1,73 @@
+site_name: ProxySQL Admin WebUI 用户手册
+site_description: 现代化的 ProxySQL 图形化管理界面 — 完整用户手册
+site_author: xzydm
+repo_url: https://github.com/JacksonJiangxh/proxysql-admin-webui
+repo_name: proxysql-admin-webui
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 JacksonJiangxh · MIT License
+
+theme:
+  name: material
+  language: zh
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换暗色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换亮色模式
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - toc.follow
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 4
+
+plugins:
+  - search:
+      lang: zh
+
+nav:
+  - 首页: index.md
+  - 快速入门: getting-started.md
+  - 用户手册: USER_MANUAL.md
+  - 配置向导参考: WIZARD_GUIDE.md
+  - 安装与部署: DEPLOYMENT.md
+  - 配置参考: configuration.md
+  - 故障排除: troubleshooting.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/JacksonJiangxh/proxysql-admin-webui

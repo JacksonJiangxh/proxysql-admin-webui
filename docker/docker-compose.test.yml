@@ -1,0 +1,59 @@
+version: '3.8'
+
+# Multi-service test environment for integration testing.
+#
+# Services:
+# - proxysql-admin-webui: The main FastAPI application under test
+# - proxysql-mock: A lightweight Python-based ProxySQL mock server
+#
+# The mock server simulates ProxySQL's MySQL-compatible admin interface
+# on port 6032, allowing integration tests to exercise the full API flow
+# without requiring a real ProxySQL instance.
+
+services:
+  proxysql-admin-webui:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=sqlite:///data/test_app.db
+      - SECRET_KEY=test-secret-key-for-integration-tests-min-32-chars!!
+      - FERNET_KEY=${FERNET_KEY:-YOUR_FERNET_KEY_MUST_BE_SET}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - CORS_ORIGINS=http://localhost:8080
+      - LOG_LEVEL=DEBUG
+      - PROXYSQL_DEFAULT_HOST=proxysql-mock
+      - PROXYSQL_DEFAULT_PORT=6032
+      - PROXYWEB_ADMIN_USER=admin
+      - PROXYWEB_ADMIN_PASSWORD=admin
+    volumes:
+      - test_app_data:/app/data
+    depends_on:
+      proxysql-mock:
+        condition: service_healthy
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  proxysql-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    ports:
+      - "6032:6032"
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "6032"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+
+volumes:
+  test_app_data:

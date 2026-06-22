@@ -1,0 +1,17 @@
+# ProxySQL Mock Server Dockerfile
+#
+# A lightweight Python-based mock that listens on port 6032 and responds
+# to MySQL-compatible admin commands. Used for integration testing so
+# tests don't require a real ProxySQL installation.
+
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir pymysql
+
+COPY proxysql_mock.py /app/proxysql_mock.py
+
+WORKDIR /app
+
+EXPOSE 6032
+
+CMD ["python", "proxysql_mock.py"]

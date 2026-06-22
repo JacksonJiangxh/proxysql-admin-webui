@@ -1,0 +1,34 @@
+version: '3.8'
+
+# ProxySQL Admin WebUI — 单容器部署
+#
+# 所有配置通过项目根目录的 .env 文件统一管理。
+# 首次部署请复制 .env.example → .env 并修改其中的密钥：
+#   cp .env.example .env
+#   vim .env    # 修改 SECRET_KEY 和 FERNET_KEY
+#
+# 镜像标签说明：
+#   latest      最新稳定版（推荐）
+#   <version>   指定版本（如 v1.0.0）
+#
+# 镜像仓库（二选一）：
+#   CNB:  docker.cnb.cool/xzydm/proxysql-admin-webui   ← 默认（主仓库）
+#   GitHub: ghcr.io/jacksonjiangxh/proxysql-admin-webui  ← GitHub 镜像
+
+services:
+  proxysql-admin-webui:
+    image: docker.cnb.cool/xzydm/proxysql-admin-webui:latest
+    # 如需从源码构建，替换为以下内容：
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - app_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  app_data:

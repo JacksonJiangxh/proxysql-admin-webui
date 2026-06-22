@@ -1,0 +1,148 @@
+name: Release Docker
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v1.0.0)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  publish:
+    name: Publish Multi-Arch Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # 计算标签：将 docker/metadata-action 的复杂表达式拆分为独立步骤，
+      # 避免 ! 操作符在 tags 多行字符串中的解析风险，同时正确支持 workflow_dispatch
+      - name: Determine version and release type
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          VERSION="${TAG#v}"
+          MAJOR_MINOR="${VERSION%.*}"
+          MAJOR="${VERSION%%.*}"
+
+          echo "full_tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "major_minor=${MAJOR_MINOR}" >> $GITHUB_OUTPUT
+          echo "major=${MAJOR}" >> $GITHUB_OUTPUT
+
+          # 判断是否为稳定版（无 rc/beta/alpha 后缀）
+          IS_STABLE="true"
+          if echo "${TAG}" | grep -qE '(rc|beta|alpha)'; then
+            IS_STABLE="false"
+          fi
+          echo "is_stable=${IS_STABLE}" >> $GITHUB_OUTPUT
+
+          echo "→ Version: ${VERSION}  (stable: ${IS_STABLE})"
+
+      # 生成 Docker 标签：semver 分解 + latest
+      - name: Generate Docker tags
+        id: tags
+        run: |
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          V="${{ steps.version.outputs.version }}"
+          MM="${{ steps.version.outputs.major_minor }}"
+          M="${{ steps.version.outputs.major }}"
+
+          TAGS="${IMG}:${V}"
+          TAGS="${TAGS},${IMG}:${MM}"
+          TAGS="${TAGS},${IMG}:${M}"
+
+          if [ "${{ steps.version.outputs.is_stable }}" = "true" ]; then
+            TAGS="${TAGS},${IMG}:latest"
+          fi
+
+          echo "Generated tags: ${TAGS}"
+          echo "list=${TAGS}" >> $GITHUB_OUTPUT
+
+      - name: Extract labels for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.title=ProxySQL Admin WebUI
+            org.opencontainers.image.description=现代化的 ProxySQL 图形化管理界面
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 不开启 provenance（由下方 attest-build-provenance 统一签名），避免双重 attestation
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.tags.outputs.list }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: true
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Image summary
+        run: |
+          echo "## 🐳 Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | Image |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAGS="${{ steps.tags.outputs.list }}"
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          for t in "${TAG_ARRAY[@]}"; do
+            t=$(echo "$t" | xargs)
+            echo "| \`${t#${IMG}:}\` | \`${t}\` |" >> $GITHUB_STEP_SUMMARY
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**支持的架构**: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 拉取镜像" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${IMG}:latest" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

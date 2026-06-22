@@ -1,0 +1,222 @@
+name: Release Binaries
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v1.0.0), leave empty for latest'
+        required: false
+        type: string
+
+env:
+  PACKAGE_NAME: proxysql-admin-webui
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+          test -f dist/index.html || { echo "❌ Frontend build failed"; exit 1; }
+
+      - name: Install Python dependencies
+        run: pip install -r backend/requirements.txt pyinstaller
+
+      - name: Determine version
+        id: version
+        run: |
+          # 区分 tag push 和手动触发
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+            if [ -z "$TAG" ]; then
+              echo "❌ ERROR: 'tag' input is required for manual dispatch (e.g. v1.0.0)"
+              exit 1
+            fi
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "is_prerelease=${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}" >> $GITHUB_OUTPUT
+          echo "Version: $TAG → ${TAG#v}"
+
+      - name: Build single binary (PyInstaller)
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARCH="${{ matrix.arch }}"
+
+          echo "🔨 Building ${PACKAGE_NAME} v${VERSION} (linux/${ARCH}) …"
+
+          pyinstaller \
+            --onefile \
+            --name "${PACKAGE_NAME}" \
+            --add-data "frontend/dist:frontend/dist" \
+            --hidden-import uvicorn.logging \
+            --hidden-import uvicorn.loops.auto \
+            --hidden-import uvicorn.protocols.http.auto \
+            backend/run.py
+
+          ls -lh "dist/${PACKAGE_NAME}"
+          file "dist/${PACKAGE_NAME}"
+          echo "✅ Binary build OK"
+
+      - name: Archive binary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARCH="${{ matrix.arch }}"
+          ARCHIVE="${PACKAGE_NAME}-${VERSION}-linux-${ARCH}.tar.gz"
+
+          tar -czf "${ARCHIVE}" -C dist "${PACKAGE_NAME}"
+          sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256"
+          echo "📦 ${ARCHIVE} ($(du -h "${ARCHIVE}" | cut -f1))"
+          echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
+        id: archive
+
+      - name: Upload artifact (for cross-job sharing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}
+          path: |
+            ${{ steps.archive.outputs.archive }}
+            ${{ steps.archive.outputs.archive }}.sha256
+          if-no-files-found: error
+
+  upload:
+    name: Create / Update Release
+    needs: build
+    # 只在 tag push 或手动指定了 tag 时上传
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ env.PACKAGE_NAME }}-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh artifacts/
+
+      - name: Determine release type
+        id: release
+        run: |
+          echo "version=${{ needs.build.outputs.version }}" >> $GITHUB_OUTPUT
+          echo "tag=${{ needs.build.outputs.tag }}" >> $GITHUB_OUTPUT
+          # 使用实际 tag 名称判断是否为预发布（而非 github.ref_name，后者在 workflow_dispatch 下是分支名）
+          TAG="${{ needs.build.outputs.tag }}"
+          if echo "$TAG" | grep -qE '(rc|beta|alpha)'; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build release notes
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          VERSION="${{ steps.release.outputs.version }}"
+          cat > release-body.md <<'RELEASEOF'
+          ## ProxySQL Admin WebUI __TAG__
+
+          ### 🚀 单文件部署包（无需安装 Python / Node / Docker）
+
+          | 架构 | 文件 |
+          |------|------|
+          | linux/amd64 | `__PREFIX__-__VERSION__-linux-amd64.tar.gz` |
+          | linux/arm64 | `__PREFIX__-__VERSION__-linux-arm64.tar.gz` |
+
+          ```bash
+          # 下载对应架构 → 解压 → 运行
+          tar -xzf __PREFIX__-__VERSION__-linux-amd64.tar.gz
+          ./__PREFIX__ --host 0.0.0.0 --port 8080
+          ```
+
+          ### 🐳 Docker 镜像（多架构 amd64 + arm64）
+
+          ```bash
+          docker pull ghcr.io/__REPO__:__VERSION__
+          ```
+
+          ### 📖 用户手册
+          https://jacksonjiangxh.github.io/proxysql-admin-webui/
+          RELEASEOF
+          sed -i "s|__TAG__|${TAG}|g" release-body.md
+          sed -i "s|__PREFIX__|${PACKAGE_NAME}|g" release-body.md
+          sed -i "s|__VERSION__|${VERSION}|g" release-body.md
+          sed -i "s|__REPO__|${{ github.repository }}|g" release-body.md
+
+      - name: Upload binaries to Release
+        id: upload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          VERSION="${{ steps.release.outputs.version }}"
+
+          PRERELEASE_FLAG=""
+          if [ "${{ steps.release.outputs.is_prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          # 收集所有归档文件
+          FILES=(artifacts/*.tar.gz artifacts/*.tar.gz.sha256)
+
+          if gh release view "${TAG}" &>/dev/null; then
+            echo "📝 Release ${TAG} already exists, uploading all packages …"
+            gh release upload "${TAG}" "${FILES[@]}" --clobber
+          else
+            echo "🚀 Creating release ${TAG} …"
+            gh release create "${TAG}" \
+              --title "ProxySQL Admin WebUI ${TAG}" \
+              --notes-file release-body.md \
+              ${PRERELEASE_FLAG} \
+              "${FILES[@]}"
+          fi
+
+          echo "✅ Release ${TAG} published"
+          echo "url=https://github.com/${{ github.repository }}/releases/tag/${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Release ${{ steps.release.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 ${{ steps.upload.outputs.url }}" >> $GITHUB_STEP_SUMMARY

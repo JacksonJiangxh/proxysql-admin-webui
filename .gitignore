@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+dist/
+.next/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data
+backend/data/
+*.db
+*.db-journal
+*.db-wal
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Playwright
+frontend/e2e/.auth/
+frontend/test-results/
+frontend/playwright-report/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# MkDocs (documentation site build output)
+site/
+
+# Generated code (optional - uncomment to track)
+# backend/app/generated/*
+# !backend/app/generated/__init__.py
