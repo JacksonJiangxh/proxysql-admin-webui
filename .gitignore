@@ -23,7 +23,7 @@ dist/
 *.swp
 *.swo
 *~
-
+.codebuddy
 # Environment
 .env
 .env.local
