@@ -128,6 +128,9 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout (gh release 需要 git 仓库上下文)
+        uses: actions/checkout@v7
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:

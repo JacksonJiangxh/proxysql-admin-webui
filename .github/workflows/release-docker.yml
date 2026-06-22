@@ -12,7 +12,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   publish:
@@ -27,6 +26,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      # Docker 镜像名必须全小写，github.repository 可能含大写字母
+      - name: Normalize image name (lowercase)
+        run: |
+          REPO="${{ github.repository }}"
+          echo "IMAGE_NAME=${REPO,,}" >> $GITHUB_ENV
+          echo "→ Image: ghcr.io/${REPO,,}"
 
       # 计算标签：将 docker/metadata-action 的复杂表达式拆分为独立步骤，
       # 避免 ! 操作符在 tags 多行字符串中的解析风险，同时正确支持 workflow_dispatch
