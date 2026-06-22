@@ -15,14 +15,16 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      workflows: write
+      actions: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # 必须用 PAT 而非 GITHUB_TOKEN：
+          # GITHUB_TOKEN 推送的 tag 不会触发其他 workflow（如 release-binaries）
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Configure Git
         run: |
@@ -109,7 +111,7 @@ jobs:
         if: steps.check.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
           branch: sync/upstream
           delete-branch: true
           title: 'chore: sync from upstream'
