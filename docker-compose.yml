@@ -13,7 +13,7 @@ version: '3.8'
 #
 # 镜像仓库（二选一）：
 #   CNB:  docker.cnb.cool/xzydm/proxysql-admin-webui   ← 默认（主仓库）
-#   GitHub: ghcr.io/<your-username>/proxysql-admin-webui  ← GitHub 镜像
+#   GitHub: ghcr.io/jacksonjiangxh/proxysql-admin-webui  ← GitHub 镜像
 
 services:
   proxysql-admin-webui:
