@@ -1,14 +1,32 @@
-"""Configuration sync API endpoints."""
-from fastapi import APIRouter, Depends
+"""Configuration sync API endpoints.
 
+Manages ProxySQL config lifecycle: check status, apply to runtime,
+save to disk, discard changes, load from disk.
+
+Cache invalidation: config diff cache is cleared after every mutating
+sync action (apply/save/discard/load) to prevent serving stale diffs.
+""" 
+from fastapi import APIRouter, Depends, Query
+
+from app.config import settings
 from app.middleware import get_current_user, require_role
+from app.schemas.sync import SyncStatusResponse, SyncActionResult
+from app.schemas.response import RESPONSE_AUTH, RESPONSE_500, HTTPError
+from app.services.cache_service import cache_service
 from app.services.sync_service import sync_service, SyncAction
 from app.utils.db_helpers import get_proxysql_credentials
 
-router = APIRouter()
+router = APIRouter(tags=["Config Sync"])
 
 
-@router.get("/{server_id}/status")
+@router.get(
+    "/{server_id}/status",
+    response_model=SyncStatusResponse,
+    responses={**RESPONSE_AUTH},
+    summary="Get sync status",
+    description="Check which config tables have pending changes "
+                "(Memory differs from Runtime).",
+)
 async def get_sync_status(
     server_id: str,
     user=Depends(get_current_user),
@@ -19,10 +37,24 @@ async def get_sync_status(
     return {"server_id": server_id, **status}
 
 
-@router.post("/{server_id}/apply")
+@router.post(
+    "/{server_id}/apply",
+    response_model=SyncActionResult,
+    responses={
+        200: {"description": "Config applied to runtime."},
+        500: {"description": "Apply failed — ProxySQL error.", "model": HTTPError},
+        **RESPONSE_AUTH,
+    },
+    summary="Apply to runtime",
+    description="Apply pending Memory changes to Runtime. "
+                "Invalidates config diff cache for this server.",
+)
 async def apply_config(
     server_id: str,
-    tables: list[str] = None,
+    tables: list[str] = Query(
+        default=None,
+        description="Specific tables to apply. If omitted, all changed tables.",
+    ),
     user=Depends(require_role("admin", "operator")),
 ):
     """Apply configuration changes to runtime."""
@@ -30,13 +62,30 @@ async def apply_config(
     result = await sync_service.sync_action(
         host, port, admin_user, password, SyncAction.APPLY, tables
     )
+    # Invalidate config diff cache
+    if settings.CACHE_ENABLED:
+        cache_service.invalidate_config_diff(server_id)
     return result
 
 
-@router.post("/{server_id}/save")
+@router.post(
+    "/{server_id}/save",
+    response_model=SyncActionResult,
+    responses={
+        200: {"description": "Config saved to disk."},
+        500: {"description": "Save failed — disk error.", "model": HTTPError},
+        **RESPONSE_AUTH,
+    },
+    summary="Save to disk",
+    description="Persist current Runtime config to disk. "
+                "Invalidates config diff cache for this server.",
+)
 async def save_config(
     server_id: str,
-    tables: list[str] = None,
+    tables: list[str] = Query(
+        default=None,
+        description="Specific tables to save. If omitted, all tables.",
+    ),
     user=Depends(require_role("admin", "operator")),
 ):
     """Save configuration to disk."""
@@ -44,13 +93,29 @@ async def save_config(
     result = await sync_service.sync_action(
         host, port, admin_user, password, SyncAction.SAVE, tables
     )
+    if settings.CACHE_ENABLED:
+        cache_service.invalidate_config_diff(server_id)
     return result
 
 
-@router.post("/{server_id}/discard")
+@router.post(
+    "/{server_id}/discard",
+    response_model=SyncActionResult,
+    responses={
+        200: {"description": "Changes discarded, reloaded from runtime."},
+        500: {"description": "Discard failed.", "model": HTTPError},
+        **RESPONSE_AUTH,
+    },
+    summary="Discard changes",
+    description="Discard pending Memory changes and reload from Runtime. "
+                "Invalidates config diff cache for this server.",
+)
 async def discard_changes(
     server_id: str,
-    tables: list[str] = None,
+    tables: list[str] = Query(
+        default=None,
+        description="Specific tables to discard. If omitted, all changed tables.",
+    ),
     user=Depends(require_role("admin", "operator")),
 ):
     """Discard changes and reload from runtime."""
@@ -58,13 +123,29 @@ async def discard_changes(
     result = await sync_service.sync_action(
         host, port, admin_user, password, SyncAction.DISCARD, tables
     )
+    if settings.CACHE_ENABLED:
+        cache_service.invalidate_config_diff(server_id)
     return result
 
 
-@router.post("/{server_id}/load")
+@router.post(
+    "/{server_id}/load",
+    response_model=SyncActionResult,
+    responses={
+        200: {"description": "Config loaded from disk."},
+        500: {"description": "Load failed.", "model": HTTPError},
+        **RESPONSE_AUTH,
+    },
+    summary="Load from disk",
+    description="Load configuration from disk into Memory. "
+                "Invalidates config diff cache for this server.",
+)
 async def load_from_disk(
     server_id: str,
-    tables: list[str] = None,
+    tables: list[str] = Query(
+        default=None,
+        description="Specific tables to load. If omitted, all tables.",
+    ),
     user=Depends(require_role("admin", "operator")),
 ):
     """Load configuration from disk."""
@@ -72,4 +153,6 @@ async def load_from_disk(
     result = await sync_service.sync_action(
         host, port, admin_user, password, SyncAction.LOAD, tables
     )
+    if settings.CACHE_ENABLED:
+        cache_service.invalidate_config_diff(server_id)
     return result

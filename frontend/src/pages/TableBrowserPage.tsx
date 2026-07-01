@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { tablesApi } from '../api/client'
+import { tablesApi, exportApi } from '../api/client'
 import { useServerStore } from '../stores/serverStore'
 import { useI18n } from '../i18n'
-import { Table, Database, HardDrive, Cpu, Zap, BarChart3, Monitor, History, ChevronDown, ChevronRight, Lightbulb, type LucideIcon } from 'lucide-react'
+import { Table, Database, HardDrive, Cpu, Zap, BarChart3, Monitor, History, ChevronDown, ChevronRight, Lightbulb, Download, type LucideIcon } from 'lucide-react'
 
 type GroupName = string
 
@@ -97,12 +97,36 @@ export default function TableBrowserPage() {
     enabled: !!selectedId && !!selectedTable,
   })
 
+  const [showExportMenu, setShowExportMenu] = useState(false)
+
   const toggleLayer = (key: string) => {
     setCollapsedLayers(prev => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key); else next.add(key)
       return next
     })
+  }
+
+  const handleExportTable = async (format: 'csv' | 'json') => {
+    if (!selectedId || !selectedTable) return
+    try {
+      const layer = selectedLayer === 'runtime' ? 'runtime' : selectedLayer === 'disk' ? 'disk' : 'memory'
+      const resp = await exportApi.tableData(selectedId, selectedTable, format, layer)
+      const ext = format === 'csv' ? 'csv' : 'json'
+      const mime = format === 'csv' ? 'text/csv' : 'application/json'
+      const url = window.URL.createObjectURL(new Blob([resp.data], { type: mime }))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `${selectedTable}_${selectedLayer}.${ext}`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      // silently fail
+    } finally {
+      setShowExportMenu(false)
+    }
   }
 
   // Guide text for the currently selected table.
@@ -196,7 +220,36 @@ export default function TableBrowserPage() {
                     ({selectedLayer}{selectedDatabase !== 'main' ? ` · ${selectedDatabase}` : ''})
                   </span>
                 </h3>
-                <span className="text-sm text-gray-500 dark:text-slate-400">{rows.length} {t('tables.rows')}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-500 dark:text-slate-400">{rows.length} {t('tables.rows')}</span>
+                  {rows.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowExportMenu((v) => !v)}
+                        className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 border border-gray-300 dark:border-slate-600 px-2 py-1 rounded-lg transition-colors"
+                      >
+                        <Download size={14} />
+                        {t('tables.exportBtn')}
+                      </button>
+                      {showExportMenu && (
+                        <div className="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg z-10 py-1 min-w-[140px]">
+                          <button
+                            onClick={() => handleExportTable('csv')}
+                            className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                          >
+                            {t('tables.exportCsv')}
+                          </button>
+                          <button
+                            onClick={() => handleExportTable('json')}
+                            className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                          >
+                            {t('tables.exportJson')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* ── Beginner's Guide Panel ── */}

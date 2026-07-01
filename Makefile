@@ -1,10 +1,11 @@
-.PHONY: help install build-frontend run dev-backend dev-frontend test lint clean codegen docker-build docker-up docker-down docker-build-test docker-test e2e-test benchmark release-check
+.PHONY: help install build-frontend run dev-backend dev-frontend test test-frontend lint lint-frontend clean codegen docker-build docker-up docker-down docker-build-test docker-test e2e-test benchmark release-check pre-commit-install
 
 help:
 	@echo "ProxySQL Admin WebUI - 开发与部署命令"
 	@echo ""
 	@echo "  开发:"
 	@echo "  make install           安装所有依赖 (backend + frontend)"
+	@echo "  make pre-commit-install 安装 git pre-commit hooks"
 	@echo "  make build-frontend    构建前端到 frontend/dist (生产部署前置)"
 	@echo "  make run               生产模式: 单进程同时提供 API + 前端 (http://localhost:8080)"
 	@echo "  make dev-backend       开发模式: 仅后端 (热重载, :8080)"
@@ -13,7 +14,9 @@ help:
 	@echo ""
 	@echo "  测试:"
 	@echo "  make test              运行后端单元测试"
+	@echo "  make test-frontend     运行前端单元测试 (Vitest)"
 	@echo "  make lint              运行代码检查 (ruff + eslint)"
+	@echo "  make lint-frontend     仅检查前端代码"
 	@echo "  make docker-test       运行 Docker Compose 集成测试"
 	@echo "  make e2e-test          运行前端 E2E 测试 (Playwright)"
 	@echo "  make benchmark         运行性能基准测试"
@@ -50,8 +53,14 @@ dev-frontend:
 test:
 	cd backend && python -m pytest tests/ -v
 
+test-frontend:
+	cd frontend && npx vitest run --coverage
+
 lint:
 	cd backend && ruff check app/
+	cd frontend && npm run lint
+
+lint-frontend:
 	cd frontend && npm run lint
 
 clean:
@@ -95,6 +104,11 @@ benchmark:
 	bash scripts/benchmark.sh
 
 # ── Release ───────────────────────────────────────────────────────
+
+pre-commit-install:
+	pip install pre-commit
+	pre-commit install
+	@echo "✅ Pre-commit hooks installed. They will run on every commit."
 
 release-check: lint test build-frontend
 	@echo ""

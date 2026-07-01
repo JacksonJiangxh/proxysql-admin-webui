@@ -1,30 +1,65 @@
-"""Dashboard monitoring API endpoints."""
+"""Dashboard monitoring API endpoints.
+
+Provides real-time ProxySQL metrics via REST snapshot and WebSocket push.
+REST endpoint is cached server-side (TTL ~10s) to reduce ProxySQL query load.
+""" 
 import asyncio
 import json
 import logging
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 
+from app.config import settings
 from app.middleware import get_current_user
+from app.schemas.dashboard import DashboardSnapshotResponse
+from app.schemas.response import RESPONSE_AUTH
+from app.services.cache_service import cache_service
 from app.services.dashboard_service import dashboard_service
 from app.utils.db_helpers import get_proxysql_credentials
 from app.utils.security import decode_token
-from app.config import settings
 
-router = APIRouter()
-ws_router = APIRouter()
+router = APIRouter(tags=["Dashboard"])
+ws_router = APIRouter(tags=["Dashboard WS"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/{server_id}/snapshot")
+@router.get(
+    "/{server_id}/snapshot",
+    response_model=DashboardSnapshotResponse,
+    responses={**RESPONSE_AUTH},
+    summary="Get dashboard snapshot",
+    description="Retrieve a real-time monitoring snapshot from a ProxySQL server. "
+                "Includes connections, QPS, traffic, memory, hostgroup details, "
+                "and top query digests. Results are cached server-side for "
+                f"{settings.CACHE_TTL_DASHBOARD}s to reduce ProxySQL load.",
+)
 async def get_dashboard_snapshot(
     server_id: str,
-    digest_limit: int = 10,
+    digest_limit: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+        description="Maximum number of query digest entries to return.",
+    ),
     user=Depends(get_current_user),
 ):
     """Get current monitoring snapshot."""
+    # Try cache first (if enabled)
+    if settings.CACHE_ENABLED:
+        cached = cache_service.get_dashboard_snapshot(server_id, digest_limit)
+        if cached is not None:
+            return cached
+
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
-    snapshot = await dashboard_service.get_snapshot(host, port, admin_user, password, digest_limit)
-    return {"server_id": server_id, **snapshot}
+    snapshot = await dashboard_service.get_snapshot(
+        host, port, admin_user, password, digest_limit
+    )
+    result = {"server_id": server_id, **snapshot}
+
+    # Store in cache
+    if settings.CACHE_ENABLED:
+        cache_service.set_dashboard_snapshot(server_id, digest_limit, result)
+
+    return result
 
 
 async def _authenticate_ws(websocket: WebSocket) -> dict | None:

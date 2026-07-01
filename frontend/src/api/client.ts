@@ -2,14 +2,17 @@ import axios from 'axios'
 
 export const apiClient = axios.create({
   baseURL: '',
+  withCredentials: true,   // send httpOnly cookies (refresh_token) with requests
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Request interceptor: attach auth token + CSRF token
+// Request interceptor: attach auth token (from Zustand) + CSRF token
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
+  // Dynamically read token from Zustand store (memory-only, not localStorage)
+  const state = window.__AUTH_STORE__ || null
+  const token = state ? state.token : null
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -38,31 +41,46 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      const refreshToken = localStorage.getItem('refresh_token')
-      if (refreshToken && error.config && !error.config._retry) {
+      // Try to refresh the access token using the httpOnly refresh_token cookie.
+      // The cookie is automatically sent because withCredentials: true.
+      if (error.config && !error.config._retry) {
         error.config._retry = true
         try {
           const resp = await axios.post('/api/v1/auth/refresh', {}, {
-            headers: { Authorization: `Bearer ${refreshToken}` }
+            withCredentials: true,
           })
-          localStorage.setItem('access_token', resp.data.access_token)
-          localStorage.setItem('refresh_token', resp.data.refresh_token)
-          error.config.headers.Authorization = `Bearer ${resp.data.access_token}`
+          // Update access_token in Zustand memory
+          const newToken = resp.data.access_token
+          if (window.__AUTH_STORE__) {
+            window.__AUTH_STORE__.setToken(newToken)
+          }
+          error.config.headers.Authorization = `Bearer ${newToken}`
           return apiClient(error.config)
         } catch {
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
+          // Refresh failed — redirect to login
+          if (window.__AUTH_STORE__) {
+            window.__AUTH_STORE__.setToken(null)
+          }
           window.location.href = '/login'
         }
       } else {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
+        if (window.__AUTH_STORE__) {
+          window.__AUTH_STORE__.setToken(null)
+        }
         window.location.href = '/login'
       }
     }
     return Promise.reject(error)
   }
 )
+
+// Expose the auth store to the axios interceptor (avoids circular import)
+// This is set in main.tsx after the store is created.
+declare global {
+  interface Window {
+    __AUTH_STORE__: { token: string | null; setToken: (t: string | null) => void } | null
+  }
+}
 
 // Wizard API
 export const wizardApi = {
@@ -136,6 +154,12 @@ export const queryApi = {
   execute: (serverId: string, sql: string, target?: string) =>
     apiClient.post(`/api/v1/query/${serverId}/execute`, { sql, target: target || 'admin' }),
   getSchema: (serverId: string) => apiClient.get(`/api/v1/query/${serverId}/schema`),
+  getHistory: (serverId: string, params?: Record<string, unknown>) =>
+    apiClient.get(`/api/v1/query/${serverId}/history`, { params }),
+  clearHistory: (serverId: string) =>
+    apiClient.delete(`/api/v1/query/${serverId}/history`),
+  deleteHistoryItem: (serverId: string, historyId: number) =>
+    apiClient.delete(`/api/v1/query/${serverId}/history/${historyId}`),
 }
 
 // Servers API
@@ -190,4 +214,32 @@ export const clustersApi = {
   discover: (id: string) => apiClient.get(`/api/v1/clusters/${id}/discover`),
   getSyncLogs: (id: string, limit?: number) =>
     apiClient.get(`/api/v1/clusters/${id}/sync-logs`, { params: { limit: limit || 50 } }),
+}
+
+// Backup API
+export const backupApi = {
+  create: (serverId: string, data?: Record<string, unknown>) =>
+    apiClient.post(`/api/v1/backup/${serverId}/create`, data || {}),
+  list: (serverId: string) =>
+    apiClient.get(`/api/v1/backup/${serverId}/list`),
+  download: (serverId: string, backupId: number) =>
+    apiClient.get(`/api/v1/backup/${serverId}/${backupId}/download`, { responseType: 'blob' }),
+  restore: (serverId: string, backupId: number, data?: Record<string, unknown>) =>
+    apiClient.post(`/api/v1/backup/${serverId}/${backupId}/restore`, data || {}),
+  delete: (serverId: string, backupId: number) =>
+    apiClient.delete(`/api/v1/backup/${serverId}/${backupId}`),
+}
+
+// Export API
+export const exportApi = {
+  queryResult: (serverId: string, sql: string, format: string = 'csv') =>
+    apiClient.post(`/api/v1/export/${serverId}/query-result`, null, {
+      params: { sql, format },
+      responseType: 'blob',
+    }),
+  tableData: (serverId: string, tableName: string, format: string = 'csv', layer: string = 'memory') =>
+    apiClient.get(`/api/v1/export/${serverId}/table/${tableName}`, {
+      params: { format, layer },
+      responseType: 'blob',
+    }),
 }

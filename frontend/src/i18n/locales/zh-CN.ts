@@ -65,6 +65,7 @@ export const zhCN: Record<string, string> = {
   'layout.role.admin': '管理员',
   'layout.role.operator': '操作员',
   'layout.role.viewer': '只读用户',
+  'nav.sidebar': '主导航菜单',
 
   // ── 仪表盘 ──
   'dashboard.title': '仪表盘',
@@ -723,6 +724,7 @@ export const zhCN: Record<string, string> = {
 
   // ── 导航 - 模板向导 ──
   'nav.template': '快速部署',
+  'nav.backup': '配置备份',
 
   // ── 模板向导 ──
   'template.title': '快速部署模板',
@@ -794,4 +796,94 @@ export const zhCN: Record<string, string> = {
   'template.step.W26_gc.title': 'Galera 集群拓扑',
   'template.step.W26_gc.description': '配置 Galera/PXC 集群的 hostgroups',
   'template.step.W26_gc.guide': 'Galera 集群使用同步复制，所有节点数据一致。ProxySQL 会自动识别节点角色。',
+
+  // ── 配置备份 ──
+  'backup.title': '配置备份',
+  'backup.subtitle': '创建、管理和恢复 ProxySQL 配置快照备份。',
+  'backup.createNew': '创建新备份',
+  'backup.create': '创建备份',
+  'backup.creating': '创建中…',
+  'backup.namePlaceholder': '备份名称（可选，留空自动命名）',
+  'backup.history': '备份历史',
+  'backup.empty': '暂无备份记录，点击上方按钮创建第一个备份。',
+  'backup.tables': '表数',
+  'backup.rows': '行数',
+  'backup.size': '大小',
+  'backup.created': '创建时间',
+  'backup.download': '下载',
+  'backup.restore': '恢复',
+  'backup.restoring': '恢复中…',
+  'backup.restoreConfirmTitle': '确认恢复',
+  'backup.restoreConfirmDesc': '此操作将用备份中的配置覆盖当前内存中的配置。恢复后需要手动"应用"才能生效。确定要继续吗？',
+  'backup.restoreConfirm': '确认恢复',
+  'backup.restoreSuccess': '配置已从备份恢复到内存层。',
+  'backup.restoreSuccessAlert': '配置恢复成功！请到配置同步页面应用更改到运行时。',
+  'backup.restoreFailed': '恢复失败',
+  'backup.deleteConfirmTitle': '确认删除',
+  'backup.deleteConfirmDesc': '删除后不可恢复，确定要删除此备份吗？',
+  'backup.deleting': '删除中…',
+  'backup.noServerSelected': '未选择 ProxySQL 服务器，请先在服务器管理页面配置。',
+
+  // ── SQL 控制台扩展 ──
+  'query.historyTitle': '查询历史',
+  'query.historyEmpty': '暂无查询历史',
+  'query.historySearchPlaceholder': '搜索 SQL…',
+  'query.historyRunAgain': '再次执行',
+  'query.historyClearAll': '清除全部',
+  'query.historyClearConfirm': '确定要清除所有查询历史吗？',
+  'query.historyDeleteItem': '删除此记录',
+  'query.historyTotal': '共 {total} 条记录',
+  'query.historyLoadMore': '加载更多',
+  'query.historyError': '有错误',
+  'query.historyDateFrom': '开始日期',
+  'query.historyDateTo': '结束日期',
+  'query.exportCsv': '导出 CSV',
+  'query.exportJson': '导出 JSON',
+  'query.exportBtn': '导出',
+
+  // ── 表浏览器扩展 ──
+  'tables.exportCsv': '导出 CSV',
+  'tables.exportJson': '导出 JSON',
+  'tables.exportBtn': '导出',
+
+  // ── 新手引导 Tour ──
+  'tour.start': '开始导览',
+  'tour.skip': '跳过导览',
+  'tour.prev': '上一步',
+  'tour.next': '下一步',
+  'tour.done': '完成',
+  'tour.stepCounter': '第 {current} / {total} 步',
+  'tour.sidebar.title': '导航侧边栏',
+  'tour.sidebar.content': '左侧是主导航菜单。从这里可以快速访问 ProxySQL 的所有管理功能，包括仪表盘、配置向导、SQL 控制台等。',
+  'tour.serverSelector.title': '服务器选择器',
+  'tour.serverSelector.content': '顶部左侧可以选择要管理的 ProxySQL 实例。支持管理多台 ProxySQL 服务器，方便切换。',
+  'tour.themeLanguage.title': '主题与语言',
+  'tour.themeLanguage.content': '右上角可以切换深色/浅色模式和界面语言（中/英文），满足不同使用习惯。',
+  'tour.dashboard.title': '实时监控仪表盘',
+  'tour.dashboard.content': '首页仪表盘展示关键指标：活跃连接数、QPS、总查询量等。数据通过 WebSocket 实时推送，无需手动刷新。',
+  'tour.wizards.title': '配置向导',
+  'tour.wizards.content': '配置向导提供 63 个引导式表单，覆盖后端服务器、用户认证、查询路由、防火墙、监控等全套 ProxySQL 配置。无需手动编写 SQL。',
+  'tour.search.title': '全局搜索',
+  'tour.search.content': '按 Ctrl+K（Mac: ⌘K）打开全局搜索，可以快速搜索页面、配置向导和常用功能。输入关键词即可跳转。',
+
+  // ── 全局搜索 ──
+  'search.placeholder': '搜索页面、向导、功能…',
+  'search.noResults': '未找到匹配结果',
+  'search.typeToSearch': '输入关键词开始搜索…',
+  'search.page': '页面',
+  'search.wizard': '配置向导',
+  'search.table': '配置表',
+
+  // ── 错误页面 ──
+  'error.title': '出了点问题',
+  'error.description': '发生了意外错误，请重试。',
+  'error.reload': '重新加载',
+  'error.goHome': '返回首页',
+
+  // ── Toast 通知 ──
+  'toast.dismiss': '关闭通知',
+  'toast.success': '操作成功',
+  'toast.error': '操作失败',
+  'toast.warning': '警告',
+  'toast.info': '提示',
 }

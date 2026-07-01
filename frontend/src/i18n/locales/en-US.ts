@@ -62,6 +62,7 @@ export const enUS: Record<string, string> = {
   'layout.role.admin': 'Admin',
   'layout.role.operator': 'Operator',
   'layout.role.viewer': 'Viewer',
+  'nav.sidebar': 'Main navigation',
 
   // ── Dashboard ──
   'dashboard.title': 'Dashboard',
@@ -718,6 +719,7 @@ export const enUS: Record<string, string> = {
 
   // ── Navigation - Template wizard ──
   'nav.template': 'Quick Setup',
+  'nav.backup': 'Config Backup',
 
   // ── Template wizard ──
   'template.title': 'Quick Setup Templates',
@@ -789,4 +791,94 @@ export const enUS: Record<string, string> = {
   'template.step.W26_gc.title': 'Galera Cluster Topology',
   'template.step.W26_gc.description': 'Configure Galera/PXC cluster hostgroups',
   'template.step.W26_gc.guide': 'Galera cluster uses synchronous replication — all nodes have consistent data. ProxySQL automatically identifies node roles.',
+
+  // ── Config Backup ──
+  'backup.title': 'Configuration Backup',
+  'backup.subtitle': 'Create, manage, and restore ProxySQL configuration snapshots.',
+  'backup.createNew': 'Create New Backup',
+  'backup.create': 'Create Backup',
+  'backup.creating': 'Creating…',
+  'backup.namePlaceholder': 'Backup name (optional, auto-generated if blank)',
+  'backup.history': 'Backup History',
+  'backup.empty': 'No backups yet. Click the button above to create your first backup.',
+  'backup.tables': 'Tables',
+  'backup.rows': 'Rows',
+  'backup.size': 'Size',
+  'backup.created': 'Created',
+  'backup.download': 'Download',
+  'backup.restore': 'Restore',
+  'backup.restoring': 'Restoring…',
+  'backup.restoreConfirmTitle': 'Confirm Restore',
+  'backup.restoreConfirmDesc': 'This will overwrite the current in-memory configuration with the backup data. You will need to manually "Apply" changes for them to take effect. Continue?',
+  'backup.restoreConfirm': 'Confirm Restore',
+  'backup.restoreSuccess': 'Configuration restored from backup to memory layer.',
+  'backup.restoreSuccessAlert': 'Restore successful! Go to Config Sync page to apply changes to runtime.',
+  'backup.restoreFailed': 'Restore failed',
+  'backup.deleteConfirmTitle': 'Confirm Delete',
+  'backup.deleteConfirmDesc': 'This action is irreversible. Are you sure you want to delete this backup?',
+  'backup.deleting': 'Deleting…',
+  'backup.noServerSelected': 'No ProxySQL server selected. Please configure one in the Servers page.',
+
+  // ── SQL Console Extended ──
+  'query.historyTitle': 'Query History',
+  'query.historyEmpty': 'No query history',
+  'query.historySearchPlaceholder': 'Search SQL…',
+  'query.historyRunAgain': 'Run again',
+  'query.historyClearAll': 'Clear all',
+  'query.historyClearConfirm': 'Are you sure you want to clear all query history?',
+  'query.historyDeleteItem': 'Delete this entry',
+  'query.historyTotal': '{total} entries total',
+  'query.historyLoadMore': 'Load more',
+  'query.historyError': 'Has error',
+  'query.historyDateFrom': 'From',
+  'query.historyDateTo': 'To',
+  'query.exportCsv': 'Export CSV',
+  'query.exportJson': 'Export JSON',
+  'query.exportBtn': 'Export',
+
+  // ── Table Browser Extended ──
+  'tables.exportCsv': 'Export CSV',
+  'tables.exportJson': 'Export JSON',
+  'tables.exportBtn': 'Export',
+
+  // ── Onboarding Tour ──
+  'tour.start': 'Start Tour',
+  'tour.skip': 'Skip Tour',
+  'tour.prev': 'Previous',
+  'tour.next': 'Next',
+  'tour.done': 'Done',
+  'tour.stepCounter': 'Step {current} of {total}',
+  'tour.sidebar.title': 'Navigation Sidebar',
+  'tour.sidebar.content': 'The sidebar is your main navigation. From here you can quickly access all ProxySQL management features including Dashboard, Configuration Wizards, SQL Console, and more.',
+  'tour.serverSelector.title': 'Server Selector',
+  'tour.serverSelector.content': 'Select which ProxySQL instance to manage from the top-left dropdown. You can manage multiple ProxySQL servers and switch between them easily.',
+  'tour.themeLanguage.title': 'Theme & Language',
+  'tour.themeLanguage.content': 'Switch between dark/light theme and language (English/Chinese) from the top-right corner to suit your preference.',
+  'tour.dashboard.title': 'Real-time Dashboard',
+  'tour.dashboard.content': 'The dashboard shows key metrics: active connections, QPS, total queries, and more. Data is pushed in real-time via WebSocket — no manual refresh needed.',
+  'tour.wizards.title': 'Configuration Wizards',
+  'tour.wizards.content': 'Configuration Wizards provide 63 guided forms covering backend servers, user authentication, query routing, firewall, monitoring, and more. No manual SQL required.',
+  'tour.search.title': 'Global Search',
+  'tour.search.content': 'Press Ctrl+K (Mac: ⌘K) to open global search. Quickly find pages, configuration wizards, and common features. Just type a keyword to jump.',
+
+  // ── Global Search ──
+  'search.placeholder': 'Search pages, wizards, features…',
+  'search.noResults': 'No results found',
+  'search.typeToSearch': 'Type to start searching…',
+  'search.page': 'Page',
+  'search.wizard': 'Configuration Wizard',
+  'search.table': 'Configuration Table',
+
+  // ── Error page ──
+  'error.title': 'Something went wrong',
+  'error.description': 'An unexpected error occurred. Please try again.',
+  'error.reload': 'Reload Page',
+  'error.goHome': 'Go to Home',
+
+  // ── Toast notifications ──
+  'toast.dismiss': 'Dismiss notification',
+  'toast.success': 'Operation successful',
+  'toast.error': 'Operation failed',
+  'toast.warning': 'Warning',
+  'toast.info': 'Information',
 }

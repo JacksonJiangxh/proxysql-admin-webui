@@ -1,0 +1,56 @@
+# Pre-commit hooks — run `pre-commit install` to activate
+# See https://pre-commit.com for installation instructions.
+
+repos:
+  # ── General file hygiene ──────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple]
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # ── Python: Ruff (linter + formatter) ────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.0
+    hooks:
+      # Lint
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+      # Format
+      - id: ruff-format
+        files: ^backend/
+
+  # ── Frontend: ESLint + Prettier ──────────────────────────────
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.57.0
+    hooks:
+      - id: eslint
+        files: ^frontend/src/.*\.(ts|tsx)$
+        types: [file]
+        args: [--fix, --max-warnings=0]
+        additional_dependencies:
+          - eslint@8.57.0
+          - '@typescript-eslint/eslint-plugin@7.13.0'
+          - '@typescript-eslint/parser@7.13.0'
+          - eslint-plugin-react-hooks@4.6.2
+          - eslint-plugin-react-refresh@0.4.7
+
+  # ── TypeScript type check ────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: tsc
+        name: TypeScript type check
+        entry: bash -c 'cd frontend && npx tsc --noEmit'
+        language: system
+        files: ^frontend/src/.*\.(ts|tsx)$
+        pass_filenames: false

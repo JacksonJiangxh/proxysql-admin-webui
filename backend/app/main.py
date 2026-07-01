@@ -30,7 +30,7 @@ from app.config import settings
 from app.database import init_db
 from app.api.v1 import (
     auth, tables, sync, query, dashboard, users, servers, wizards,
-    config_diff, clusters, templates,
+    config_diff, clusters, templates, backup, export, scheduler,
 )
 from app.api.v1 import settings as settings_api
 from app.middleware.csrf import CSRFMiddleware
@@ -38,13 +38,29 @@ from app.middleware.audit import AuditMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.cache_headers import CacheHeadersMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.metrics import MetricsMiddleware, metrics_endpoint
+from app.middleware.body_limit import BodyLimitMiddleware
+from app.schemas.response import HealthResponse
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: initialize DB on startup."""
+    """Application lifespan: init DB, start scheduler, setup structured logging."""
+    from app.utils.logger import setup_logging
+    setup_logging(
+        log_level=settings.LOG_LEVEL,
+        json_format=os.getenv("LOG_FORMAT", "").lower() != "text",
+    )
     await init_db()
+    # Initialize cache TTLs from settings
+    from app.services.cache_service import cache_service
+    cache_service._dashboard_ttl = settings.CACHE_TTL_DASHBOARD
+    cache_service._config_diff_ttl = settings.CACHE_TTL_CONFIG_DIFF
+    # Start the APScheduler for auto-backup tasks
+    from app.services.scheduler_service import scheduler_service
+    await scheduler_service.start()
     yield
+    await scheduler_service.shutdown()
 
 
 app = FastAPI(
@@ -56,35 +72,93 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS (only relevant for the Vite dev server on :5173; in production the
-# frontend is served same-origin and CORS is a no-op).
+# ═══════════════════════════════════════════════════════════════════
+# Middleware Stack (order matters!)
+# ═══════════════════════════════════════════════════════════════════
+#
+# Requests flow through middlewares in the order they are added below.
+# Each middleware's position is carefully chosen for security and correctness.
+#
+# Ordering rationale:
+#   1. CORSMiddleware        — Handles OPTIONS pre-flight FIRST, before any
+#                            auth/CSRF logic runs. In production (same-origin
+#                            SPA serving) CORS is effectively a no-op.
+#   2. GZipMiddleware       — Compresses the response body. Placed early so
+#                            that downstream middlewares still see uncompressed
+#                            bodies (simplifies ETag calculation).
+#   3. CacheHeadersMiddleware — Adds ETag / Cache-Control. Reads the final
+#                            response body AFTER compression, so ETags are
+#                            stable across compressed/uncompressed responses.
+#   4. SecurityHeadersMw    — Injects CSP, HSTS, X-Frame-Options, etc.
+#                            Must run for ALL responses (including errors).
+#   5. AuditMiddleware       — Logs the request BEFORE CSRF validation, so
+#                            that suspicious requests are still recorded.
+#   6. CSRFMiddleware       — Validates double-submit CSRF token. Runs
+#                            AFTER audit (so attacks are logged) but BEFORE
+#                            rate-limiting (to prevent attackers from exhausting
+#                            rate-limit quotas with fake requests).
+#   7. RateLimitMiddleware  — Last in the stack: by this point the request
+#                            has passed CORS, security headers, and CSRF
+#                            checks, so we only rate-limit legitimate traffic.
+#   8. BodyLimitMiddleware  — Checks Content-Length after CORS preflight
+#                            but before auth/CSRF. Rejects oversized payloads
+#                            early (413) to prevent memory exhaustion.
+# ═══════════════════════════════════════════════════════════════════
+
+# 1. CORS (only relevant for the Vite dev server on :5173; in production the
+#    frontend is served same-origin and CORS is a no-op).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-CSRF-Token",
+        "X-Requested-With",
+    ],
 )
 
-# GZip compression: reduces response size for text-based content (JSON, HTML, CSS, JS).
-# Only compresses responses > 500 bytes to avoid overhead on tiny payloads.
+# 2. GZip compression: reduces response size for text-based content (JSON, HTML, CSS, JS).
+#    Only compresses responses > 500 bytes to avoid overhead on tiny payloads.
 app.add_middleware(
     GZipMiddleware,
     minimum_size=500,
 )
 
-# Cache headers: adds ETag and Cache-Control headers for browser/CDN caching.
-# Must be added after other middlewares to see the final response body for ETag.
+# 2a. Metrics: records request counts, latency histograms, and in-flight gauge.
+#    Placed after GZip so compression overhead is included in timing, but before
+#    security/audit middlewares so ALL requests (including rejected ones) are counted.
+app.add_middleware(MetricsMiddleware)
+
+# 3. Cache headers: adds ETag and Cache-Control headers for browser/CDN caching.
+#    Must be added after other middlewares to see the final response body for ETag.
 app.add_middleware(CacheHeadersMiddleware)
 
-# Security headers: adds CSP, HSTS, X-Frame-Options, and other security headers
+# 4. Security headers: adds CSP, HSTS, X-Frame-Options, and other security headers.
+#    This runs for EVERY response (including 4xx/5xx) to ensure security headers
+#    are always present.
 app.add_middleware(SecurityHeadersMiddleware)
 
-# Security middlewares (order: AuditMiddleware first, then CSRFMiddleware)
-# This ensures CSRF checks run before audit logging captures the request
+# 5. Audit logging: records all requests for audit trail.
+#    Runs BEFORE CSRF checks so that even rejected requests are logged.
 app.add_middleware(AuditMiddleware)
+
+# 6. CSRF protection: validates double-submit CSRF token for state-changing requests.
+#    Runs AFTER audit (attacks are logged) and BEFORE rate-limiting (prevents
+#    attackers from wasting rate-limit quotas).
 app.add_middleware(CSRFMiddleware)
+
+# 7. Rate limiting: throttles requests per IP and per endpoint.
+#    Runs LAST so that only requests that passed all prior checks are counted.
+#    This prevents wasted quota on malicious/malformed requests.
 app.add_middleware(RateLimitMiddleware)
+
+# 8. Body size limiting: rejects oversized POST/PUT/PATCH payloads.
+#    Runs AFTER CORS/CSRF checks but before the request body is consumed.
+#    This prevents memory-based DoS from multipart or JSON bombs.
+app.add_middleware(BodyLimitMiddleware)
 
 # Register API routes
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
@@ -99,15 +173,50 @@ app.include_router(templates.router, prefix="/api/v1/wizards", tags=["Templates"
 app.include_router(settings_api.router, prefix="/api/v1/settings", tags=["Settings"])
 app.include_router(config_diff.router, prefix="/api/v1/config-diff", tags=["Config Diff"])
 app.include_router(clusters.router, prefix="/api/v1/clusters", tags=["Clusters"])
+app.include_router(backup.router, prefix="/api/v1/backup", tags=["Backup"])
+app.include_router(export.router, prefix="/api/v1/export", tags=["Export"])
+app.include_router(scheduler.router, prefix="/api/v1/scheduler", tags=["Scheduler"])
 
 # WebSocket routes (per TECHNICAL_DOCUMENTATION: /ws/dashboard/{server_id})
 app.include_router(dashboard.ws_router, prefix="/ws/dashboard", tags=["Dashboard WS"])
 
 
-@app.get("/api/v1/health", tags=["System"])
+@app.get("/api/v1/health", response_model=HealthResponse, tags=["System"])
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "ok", "version": "1.0.0"}
+    """Deep health check: verifies API availability and database connectivity.
+
+    Returns:
+        JSON with ``status``, ``version``, and ``database`` fields.
+    """
+    db_ok = False
+    try:
+        from app.database import get_db
+        db = await get_db()
+        try:
+            await db.execute("SELECT 1")
+            db_ok = True
+        finally:
+            await db.close()
+    except Exception:
+        db_ok = False
+
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "version": "1.0.0",
+        "database": "ok" if db_ok else "error",
+    }
+
+
+@app.get("/api/v1/metrics", tags=["System"])
+async def prometheus_metrics():
+    """Prometheus /metrics endpoint returning OpenMetrics text format.
+
+    Exposes:
+        http_requests_total, http_request_duration_seconds,
+        http_requests_in_flight, and any process-level metrics from
+        the prometheus_client library.
+    """
+    return await metrics_endpoint()
 
 
 # ── Serve the built frontend (SPA) from the same origin ──────────────

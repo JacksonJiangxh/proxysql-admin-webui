@@ -1,0 +1,56 @@
+⎯⎯⎯⎯⎯⎯ Failed Tests 20 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/hooks/__tests__/useDebounce.test.ts > useDebounce > should return initial value immediately
+ FAIL  src/hooks/__tests__/useDebounce.test.ts > useDebounce > should not update value before delay
+ FAIL  src/hooks/__tests__/useDebounce.test.ts > useDebounce > should update value after delay
+ FAIL  src/hooks/__tests__/useDebounce.test.ts > useDebounce > should reset timer when value changes within delay
+ FAIL  src/hooks/__tests__/useDebounce.test.ts > useDebounce > should cleanup timer on unmount
+ FAIL  src/hooks/__tests__/useDebounce.test.ts > useDebounce > should handle delay changes
+ReferenceError: localStorageMock is not defined
+ ❯ src/test/setup.ts:69:3
+     67| afterEach(() => {
+     68|   // Clear localStorage between tests
+     69|   localStorageMock.clear()
+       |   ^
+     70|   // Clear document.cookie
+     71|   document.cookie = ''
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  src/stores/__tests__/authStore.test.ts > authStore > login > should set user and token on successful login
+ FAIL  src/stores/__tests__/authStore.test.ts > authStore > login > should throw error on failed login
+ FAIL  src/stores/__tests__/authStore.test.ts > authStore > logout > should clear auth state on logout
+ FAIL  src/stores/__tests__/authStore.test.ts > authStore > logout > should clear state even if logout API call fails
+ FAIL  src/stores/__tests__/authStore.test.ts > authStore > checkAuth > should set user on successful auth check
+ FAIL  src/stores/__tests__/authStore.test.ts > authStore > checkAuth > should clear auth state on failed check
+ FAIL  src/stores/__tests__/authStore.test.ts > authStore > setToken > should update token and authentication state
+ FAIL  src/stores/__tests__/themeStore.test.ts > themeStore > initial state > should default to light theme
+ FAIL  src/stores/__tests__/themeStore.test.ts > themeStore > toggleTheme > should toggle from light to dark
+ FAIL  src/stores/__tests__/themeStore.test.ts > themeStore > toggleTheme > should toggle from dark to light
+ FAIL  src/stores/__tests__/themeStore.test.ts > themeStore > toggleTheme > should add dark class to document when toggling to dark
+ FAIL  src/stores/__tests__/themeStore.test.ts > themeStore > toggleTheme > should remove dark class from document when toggling to light
+ FAIL  src/stores/__tests__/themeStore.test.ts > themeStore > toggleTheme > should persist theme preference to localStorage
+ FAIL  src/stores/__tests__/themeStore.test.ts > themeStore > persistence > should rehydrate from localStorage on next init
+ReferenceError: localStorageMock is not defined
+ ❯ src/test/setup.ts:69:3
+     67| afterEach(() => {
+     68|   // Clear localStorage between tests
+     69|   localStorageMock.clear()
+       |   ^
+     70|   // Clear document.cookie
+     71|   document.cookie = ''
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  src/stores/__tests__/themeStore.test.ts > themeStore > toggleTheme > should persist theme preference to localStorage
+AssertionError: expected null not to be null
+ ❯ src/stores/__tests__/themeStore.test.ts:56:26
+     54|       // The persist middleware stores as JSON string
+     55|       const stored = localStorage.getItem('theme-storage')
+     56|       expect(stored).not.toBeNull()
+       |                          ^
+     57|       const parsed = JSON.parse(stored!)
+     58|       expect(parsed.state.theme).toBe('dark')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+

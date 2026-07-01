@@ -1,0 +1,9 @@
+
+ RUN  v2.1.9 E:/ide_project/proxysql-admin-webui/frontend
+
+
+ Test Files  14 failed (14)
+      Tests  no tests
+   Start at  23:09:41
+   Duration  6.68s (transform 100ms, setup 0ms, collect 0ms, tests 0ms, environment 11ms, prepare 23.95s)
+

@@ -167,6 +167,42 @@ CREATE TABLE IF NOT EXISTS cluster_sync_logs (
 
 CREATE INDEX IF NOT EXISTS idx_cluster_sync_logs_cluster ON cluster_sync_logs(cluster_id);
 CREATE INDEX IF NOT EXISTS idx_cluster_sync_logs_created ON cluster_sync_logs(created_at);
+
+CREATE TABLE IF NOT EXISTS config_backups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id VARCHAR(36) NOT NULL REFERENCES server_configs(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    name VARCHAR(128) NOT NULL,
+    description TEXT,
+    backup_data TEXT NOT NULL,
+    table_count INTEGER DEFAULT 0,
+    row_count INTEGER DEFAULT 0,
+    size_bytes INTEGER DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_config_backups_server ON config_backups(server_id);
+CREATE INDEX IF NOT EXISTS idx_config_backups_created ON config_backups(created_at);
+
+CREATE TABLE IF NOT EXISTS backup_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id VARCHAR(36) NOT NULL REFERENCES server_configs(id) ON DELETE CASCADE,
+    cron_expression VARCHAR(64) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_backup_schedules_server ON backup_schedules(server_id);
+
+CREATE TABLE IF NOT EXISTS user_server_permissions (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    server_id VARCHAR(36) NOT NULL REFERENCES server_configs(id) ON DELETE CASCADE,
+    can_write BOOLEAN NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, server_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_server_perms_user ON user_server_permissions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_server_perms_server ON user_server_permissions(server_id);
 """
 
 

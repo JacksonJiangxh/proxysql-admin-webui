@@ -92,11 +92,20 @@ class Settings:
             RuntimeWarning,
         )
 
-    # Rate limiting
-    LOGIN_RATE_LIMIT: str = "5/minute"
-    API_RATE_LIMIT: str = "100/minute"
-    # TODO: integrate slowapi or a custom in-memory/redis rate limiter
-    # and apply LOGIN_RATE_LIMIT to /api/v1/auth/login and API_RATE_LIMIT globally.
+    # ── Rate Limiting Settings ────────────────────────────────
+    # Set RATE_LIMIT_ENABLED=false to temporarily disable rate limiting
+    # (useful for debugging or internal deployments behind a trusted proxy).
+    RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() in ("1", "true", "yes")
+    # Global rate limit: maximum requests per IP per window
+    RATE_LIMIT_GLOBAL_MAX: int = int(os.getenv("RATE_LIMIT_GLOBAL_MAX", "100"))
+    RATE_LIMIT_GLOBAL_WINDOW: int = int(os.getenv("RATE_LIMIT_GLOBAL_WINDOW", "60"))  # seconds
+    # Per-endpoint rate limits
+    RATE_LIMIT_LOGIN_MAX: int = int(os.getenv("RATE_LIMIT_LOGIN_MAX", "5"))
+    RATE_LIMIT_LOGIN_WINDOW: int = int(os.getenv("RATE_LIMIT_LOGIN_WINDOW", "60"))
+    RATE_LIMIT_WIZARD_MAX: int = int(os.getenv("RATE_LIMIT_WIZARD_MAX", "10"))
+    RATE_LIMIT_WIZARD_WINDOW: int = int(os.getenv("RATE_LIMIT_WIZARD_WINDOW", "60"))
+    RATE_LIMIT_QUERY_MAX: int = int(os.getenv("RATE_LIMIT_QUERY_MAX", "20"))
+    RATE_LIMIT_QUERY_WINDOW: int = int(os.getenv("RATE_LIMIT_QUERY_WINDOW", "60"))
 
     # ── Security Policy Settings ──────────────────────────────────────
     SECURITY_MIN_PASSWORD_LENGTH: int = int(
@@ -108,6 +117,22 @@ class Settings:
     SECURITY_SESSION_IDLE_TIMEOUT: int = int(
         os.getenv("SECURITY_SESSION_IDLE_TIMEOUT", "30")
     )  # minutes
+
+    # ── Request Body Size Limit ───────────────────────────────
+    # Maximum request body size in bytes for POST/PUT/PATCH requests.
+    # Default: 10 MB. Prevents memory exhaustion / DoS via oversized payloads.
+    # Set higher for multi-file upload scenarios.
+    MAX_REQUEST_BODY_SIZE: int = int(os.getenv("MAX_REQUEST_BODY_SIZE", str(10 * 1024 * 1024)))  # 10 MB
+
+    # ── Server-side Cache Settings ──────────────────────────────
+    # Caching reduces repeated ProxySQL queries for dashboard snapshots and
+    # config diffs.  Uses in-memory TTLCache (single-process safe).
+    # Future: set CACHE_BACKEND=redis for multi-process deployments.
+    CACHE_ENABLED: bool = os.getenv("CACHE_ENABLED", "true").lower() in ("1", "true", "yes")
+    # Dashboard snapshot TTL: short-lived, data changes every few seconds.
+    CACHE_TTL_DASHBOARD: int = int(os.getenv("CACHE_TTL_DASHBOARD", "10"))
+    # Config diff TTL: medium-lived, invalidated on sync operations.
+    CACHE_TTL_CONFIG_DIFF: int = int(os.getenv("CACHE_TTL_CONFIG_DIFF", "60"))
 
     # Initial admin user (created on first startup)
     INITIAL_ADMIN_USER: str = os.getenv("PROXYWEB_ADMIN_USER", "admin")

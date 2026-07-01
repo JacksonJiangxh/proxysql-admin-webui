@@ -3,7 +3,10 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from './i18n'
+import { TourProvider } from './components/TourGuide'
+import { ToastProvider } from './components/ToastProvider'
 import { useThemeStore } from './stores/themeStore'
+import { useAuthStore } from './stores/authStore'
 import App from './App'
 import './index.css'
 
@@ -15,13 +18,7 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       staleTime: 30000,
-      // gcTime: keep unused data in cache for 5 minutes before garbage collection.
-      // This prevents re-fetching when users navigate back to a previously visited page.
       gcTime: 5 * 60 * 1000,
-      // refetchOnWindowFocus: false - avoids unnecessary refetches when users switch
-      // browser tabs/windows and return. ProxySQL admin data doesn't change frequently
-      // enough to warrant refetching on every focus event. Pages that need live data
-      // (Dashboard, ConfigDiff) already have refetchInterval set.
       refetchOnWindowFocus: false,
     },
   },
@@ -32,9 +29,20 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <I18nProvider>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <App />
+          <ToastProvider>
+            <TourProvider>
+              <App />
+            </TourProvider>
+          </ToastProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </I18nProvider>
   </React.StrictMode>,
 )
+
+// Expose auth store to window for the axios interceptor (client.ts).
+// This avoids a circular import between authStore.ts and client.ts.
+window.__AUTH_STORE__ = {
+  get token() { return useAuthStore.getState().token },
+  setToken(token: string | null) { useAuthStore.getState().setToken(token) },
+}

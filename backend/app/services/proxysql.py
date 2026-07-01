@@ -165,6 +165,43 @@ class ProxySQLService:
                 )
                 return cur.rowcount
 
+    # Allowed admin command patterns (whitelist) for execute_admin_command.
+    # Only commands matching these patterns are permitted, preventing command injection.
+    _ADMIN_COMMAND_WHITELIST = [
+        r'^LOAD\s+\w+(\s+\w+)*\s+TO\s+RUNTIME\s*$',
+        r'^SAVE\s+\w+(\s+\w+)*\s+TO\s+DISK\s*$',
+        r'^LOAD\s+\w+(\s+\w+)*\s+FROM\s+DISK\s*$',
+        r'^LOAD\s+\w+(\s+\w+)*\s+FROM\s+RUNTIME\s*$',
+        r'^SELECT\s+CONFIG\s+.*$',
+    ]
+    import re
+    _ADMIN_COMMAND_REGEXES = [re.compile(p, re.IGNORECASE) for p in _ADMIN_COMMAND_WHITELIST]
+
+    # Valid module name fragments that appear in LOAD/SAVE commands.
+    # These correspond to the CONFIG_MODULES entries in sync_service.py.
+    _VALID_MODULES = {
+        "MYSQL SERVERS", "MYSQL USERS", "MYSQL QUERY RULES",
+        "MYSQL VARIABLES", "ADMIN VARIABLES", "PGSQL SERVERS",
+        "PGSQL USERS", "PGSQL QUERY RULES", "PGSQL VARIABLES",
+        "PROXYSQL SERVERS", "SCHEDULER",
+    }
+
+    def _validate_admin_command(self, sql: str) -> None:
+        """Validate that the SQL is an allowed admin command.
+
+        Raises ValueError if the command is not in the whitelist.
+
+        This is a defense-in-depth measure: even though the callers
+        (sync_service, wizard_engine, cluster_service) are trusted,
+        centralizing validation here prevents future regressions.
+        """
+        sql_stripped = sql.strip()
+        if not any(rx.match(sql_stripped) for rx in self._ADMIN_COMMAND_REGEXES):
+            raise ValueError(
+                f"Command not allowed: {sql_stripped[:100]!r}. "
+                f"Only LOAD/SAVE admin commands are permitted via execute_admin_command."
+            )
+
     async def execute_admin_command(
         self,
         host: str,
@@ -179,13 +216,18 @@ class ProxySQLService:
         Uses subprocess because aiomysql sometimes returns incorrect
         results for ProxySQL management commands.
 
-        Security: password is passed via the MYSQL_PWD environment variable
-        instead of a command-line argument to avoid exposure in `ps` output.
+        Security measures:
+        1. Command whitelist validation (defense-in-depth)
+        2. Password passed via MYSQL_PWD environment variable (not command-line)
+        3. Host/port/user are not shell-interpolated (passed as separate args)
 
         Args:
             timeout: Command timeout in seconds (defaults to QUERY_TIMEOUT * 2
                      since LOAD/SAVE operations can be slower).
         """
+        # Validate the SQL command against the whitelist
+        self._validate_admin_command(sql)
+
         cmd_timeout = timeout if timeout is not None else QUERY_TIMEOUT * 2
         cmd = [
             "mysql",
@@ -194,6 +236,8 @@ class ProxySQLService:
             "-u", str(user),
             "main",
         ]
+        # Password is passed via environment variable, NOT as a command-line
+        # argument, to prevent exposure in `ps` output.
         env = {"MYSQL_PWD": str(password)}
 
         try:

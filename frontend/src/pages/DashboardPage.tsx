@@ -1,30 +1,77 @@
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { dashboardApi } from '../api/client'
+import { useMemo, useCallback } from 'react'
 import { useServerStore } from '../stores/serverStore'
+import { useAuthStore } from '../stores/authStore'
 import { useI18n } from '../i18n'
-import { Activity, Database, Zap, Server } from 'lucide-react'
+import { useWebSocket } from '../hooks/useWebSocket'
+import { Activity, Database, Zap, Server, Wifi, WifiOff } from 'lucide-react'
+
+/** Dashboard snapshot data shape (matches backend dashboard_service response). */
+interface ConnectionInfo {
+  used: number
+  free: number
+  [key: string]: unknown
+}
+
+interface HostgroupRow {
+  hostgroup: string
+  srv_host: string
+  srv_port: number
+  status: string
+  ConnUsed: number
+  ConnFree: number
+  [key: string]: unknown
+}
+
+interface DashboardSnapshot {
+  connections: ConnectionInfo[]
+  qps: { questions: number }[]
+  traffic: { queries: number }[]
+  hostgroups: HostgroupRow[]
+  [key: string]: unknown
+}
+
+/** WebSocket message shape for dashboard feed. */
+interface DashboardWsMessage {
+  type: string
+  server_id: string
+  data: DashboardSnapshot
+}
+
+/** Build the WebSocket URL for the dashboard feed. */
+function buildWsUrl(serverId: string, token: string | null): string | null {
+  if (!serverId || !token) return null
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.host
+  const params = new URLSearchParams({
+    token,
+    interval: '5',
+  })
+  return `${protocol}//${host}/ws/dashboard/${serverId}?${params.toString()}`
+}
 
 export default function DashboardPage() {
   const selectedId = useServerStore((s) => s.selectedId)
+  const token = useAuthStore((s) => s.token)
   const { t } = useI18n()
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard', selectedId],
-    queryFn: () => dashboardApi.getSnapshot(selectedId!),
-    enabled: !!selectedId,
-    refetchInterval: 10000,
-  })
+  const wsUrl = useMemo(() => buildWsUrl(selectedId!, token), [selectedId, token])
 
-  // useMemo: compute snapshot-derived values only when data changes,
-  // not on every render (e.g. sidebar toggle).
-  const snapshot = useMemo(() => data?.data || {}, [data])
-  const connections = useMemo(() => snapshot.connections?.[0] || {}, [snapshot])
-  const qps = useMemo(() => snapshot.qps?.[0]?.questions || 0, [snapshot])
-  const traffic = useMemo(() => snapshot.traffic?.[0]?.queries || 0, [snapshot])
+  const { data, isConnected, error, reconnect } = useWebSocket<DashboardWsMessage>(
+    wsUrl,
+    !!selectedId,
+  )
 
-  // useMemo: cards array is a derived data structure that triggers
-  // re-mapping on every render without memoization.
+  // Extract snapshot from the latest WebSocket message
+  const snapshot: DashboardSnapshot = data?.data || {
+    connections: [],
+    qps: [],
+    traffic: [],
+    hostgroups: [],
+  }
+  const connections = snapshot.connections?.[0] || {}
+  const qps = snapshot.qps?.[0]?.questions || 0
+  const traffic = snapshot.traffic?.[0]?.queries || 0
+
   const cards = useMemo(() => [
     { label: t('dashboard.activeConnections'), value: connections.used || 0, icon: Activity, color: 'blue' },
     { label: t('dashboard.freeConnections'), value: connections.free || 0, icon: Zap, color: 'green' },
@@ -32,8 +79,7 @@ export default function DashboardPage() {
     { label: t('dashboard.qps'), value: Number(qps).toLocaleString(), icon: Server, color: 'orange' },
   ], [connections.used, connections.free, traffic, qps, t])
 
-  // useMemo: hostgroups list to avoid re-filtering on every render
-  const hostgroups = useMemo(() => snapshot.hostgroups || [], [snapshot])
+  const hostgroups: HostgroupRow[] = snapshot.hostgroups || []
 
   if (!selectedId) {
     return (
@@ -43,28 +89,34 @@ export default function DashboardPage() {
     )
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4 text-red-700 dark:text-red-400">
-        {t('dashboard.loadFailed')}
-      </div>
-    )
-  }
-
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-6">{t('dashboard.title')}</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">{t('dashboard.title')}</h2>
+        {/* Connection status indicator */}
+        <div className="flex items-center gap-2">
+          {isConnected ? (
+            <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+              <Wifi size={16} /> {t('dashboard.connected') || 'Connected'}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-slate-400">
+              <WifiOff size={16} /> {t('dashboard.reconnecting') || 'Reconnecting...'}
+            </span>
+          )}
+          {error && (
+            <button
+              onClick={reconnect}
+              className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              {t('common.retry') || 'Retry'}
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div data-tour="dashboard-cards" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {cards.map((card) => (
           <div key={card.label} className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
             <div className="flex items-center justify-between mb-3">
@@ -92,7 +144,7 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {hostgroups.map((hg: any, i: number) => (
+              {hostgroups.map((hg: HostgroupRow, i: number) => (
                 <tr key={i} className="border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700">
                   <td className="py-2 px-3">{hg.hostgroup}</td>
                   <td className="py-2 px-3">{hg.srv_host}</td>

@@ -77,3 +77,47 @@ def require_role(*roles: str):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return user
     return role_checker
+
+
+def require_server_access(server_id_param: str = "server_id"):
+    """Dependency that checks if the current user can access a specific server.
+
+    - admin / operator: full access to all servers
+    - viewer: only access servers listed in user_server_permissions table
+
+    The server_id is extracted from the path parameter named by ``server_id_param``.
+    """
+    async def checker(request: Request, user=Depends(get_current_user)):
+        if user is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        # Admin and operator can access all servers
+        if user["role"] in ("admin", "operator"):
+            return user
+        # Viewer: check permissions table
+        server_id = request.path_params.get(server_id_param)
+        if not server_id:
+            raise HTTPException(status_code=400, detail="Missing server_id parameter")
+        db = await get_db()
+        try:
+            cursor = await db.execute(
+                "SELECT 1 FROM user_server_permissions WHERE user_id = ? AND server_id = ?",
+                (user["id"], server_id),
+            )
+            if not await cursor.fetchone():
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access to this server is not permitted for your role",
+                )
+        finally:
+            await db.close()
+        return user
+    return checker
+
+
+async def require_server_write_access(request: Request, user=Depends(get_current_user)):
+    """Dependency: check write access to a server (viewer always denied)."""
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if user["role"] in ("admin", "operator"):
+        return user
+    raise HTTPException(status_code=403, detail="Write access denied for your role")

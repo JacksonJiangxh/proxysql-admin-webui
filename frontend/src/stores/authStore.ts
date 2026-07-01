@@ -10,54 +10,54 @@ interface User {
 
 interface AuthState {
   user: User | null
-  token: string | null
-  refreshToken: string | null
+  token: string | null          // access_token (memory only, not localStorage)
   isAuthenticated: boolean
   login: (username: string, password: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   checkAuth: () => Promise<void>
+  setToken: (token: string | null) => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  token: localStorage.getItem('access_token'),
-  refreshToken: localStorage.getItem('refresh_token'),
-  isAuthenticated: !!localStorage.getItem('access_token'),
+  token: null,   // access_token is memory-only (not in localStorage for XSS safety)
+  isAuthenticated: false,
 
   login: async (username: string, password: string) => {
     const resp = await apiClient.post('/api/v1/auth/login', { username, password })
     const data = resp.data
-    localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
+    // access_token stored in memory (Zustand state)
+    // refresh_token is automatically stored in httpOnly cookie by the browser
     set({
       user: data.user,
       token: data.access_token,
-      refreshToken: data.refresh_token,
       isAuthenticated: true,
     })
   },
 
-  logout: () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+  logout: async () => {
+    try {
+      await apiClient.post('/api/v1/auth/logout')
+    } catch {
+      // ignore errors on logout
+    }
     set({
       user: null,
       token: null,
-      refreshToken: null,
       isAuthenticated: false,
     })
   },
 
   checkAuth: async () => {
-    const token = localStorage.getItem('access_token')
-    if (!token) return
     try {
       const resp = await apiClient.get('/api/v1/auth/me')
       set({ user: resp.data, isAuthenticated: true })
     } catch {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
-      set({ user: null, token: null, refreshToken: null, isAuthenticated: false })
+      set({ user: null, token: null, isAuthenticated: false })
     }
+  },
+
+  setToken: (token: string | null) => {
+    set({ token, isAuthenticated: !!token })
   },
 }))

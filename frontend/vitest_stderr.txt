@@ -1,0 +1,233 @@
+⎯⎯⎯⎯⎯⎯ Failed Suites 11 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  e2e/backup.spec.ts [ e2e/backup.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/backup.spec.ts:48:6
+     46| 
+     47| // ── Tests ──────────────────────────────────────────────────────────
+     48| test.describe('Backup Page', () => {
+       |      ^
+     49|   test.beforeEach(async ({ page }) => {
+     50|     await mockCommonApis(page);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  e2e/clusters.spec.ts [ e2e/clusters.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/clusters.spec.ts:52:6
+     50| };
+     51| 
+     52| test.describe('Clusters Page - List', () => {
+       |      ^
+     53|   test.beforeEach(async ({ page }) => {
+     54|     await page.route('**/api/v1/servers', async (route) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  e2e/dashboard.spec.ts [ e2e/dashboard.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/dashboard.spec.ts:26:6
+     24| };
+     25| 
+     26| test.describe('Dashboard Page', () => {
+       |      ^
+     27|   test.beforeEach(async ({ page }) => {
+     28|     // Mock common APIs
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  e2e/export.spec.ts [ e2e/export.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/export.spec.ts:49:6
+     47| 
+     48| // ── Tests ──────────────────────────────────────────────────────────
+     49| test.describe('Query Result Export', () => {
+       |      ^
+     50|   test.beforeEach(async ({ page }) => {
+     51|     await mockCommonApis(page);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  e2e/login.spec.ts [ e2e/login.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/login.spec.ts:15:6
+     13| import { test, expect } from '@playwright/test';
+     14| 
+     15| test.describe('Login Page', () => {
+       |      ^
+     16|   test.beforeEach(async ({ page }) => {
+     17|     await page.goto('/login');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  e2e/navigation.spec.ts [ e2e/navigation.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/navigation.spec.ts:36:6
+     34| }
+     35| 
+     36| test.describe('Navigation', () => {
+       |      ^
+     37|   test.beforeEach(async ({ page }) => {
+     38|     await mockCommonApis(page);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  e2e/scheduler.spec.ts [ e2e/scheduler.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/scheduler.spec.ts:43:6
+     41| 
+     42| // ── Tests ──────────────────────────────────────────────────────────
+     43| test.describe('Scheduler Page', () => {
+       |      ^
+     44|   test.beforeEach(async ({ page }) => {
+     45|     await mockCommonApis(page);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  e2e/servers.spec.ts [ e2e/servers.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/servers.spec.ts:17:6
+     15| ];
+     16| 
+     17| test.describe('Servers Page', () => {
+       |      ^
+     18|   test.beforeEach(async ({ page }) => {
+     19|     await page.route('**/api/v1/servers', async (route) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  e2e/tables.spec.ts [ e2e/tables.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/tables.spec.ts:33:6
+     31| };
+     32| 
+     33| test.describe('Table Browser Page', () => {
+       |      ^
+     34|   test.beforeEach(async ({ page }) => {
+     35|     await page.route('**/api/v1/servers', async (route) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  e2e/users.spec.ts [ e2e/users.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/users.spec.ts:22:6
+     20| ];
+     21| 
+     22| test.describe('Users Page', () => {
+       |      ^
+     23|   test.beforeEach(async ({ page }) => {
+     24|     await page.route('**/api/v1/servers', async (route) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  e2e/wizards.spec.ts [ e2e/wizards.spec.ts ]
+Error: Playwright Test did not expect test.describe() to be called here.
+Most common reasons include:
+- You are calling test.describe() in a configuration file.
+- You are calling test.describe() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.describe() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2256:13
+ ❯ _TestTypeImpl._describe node_modules/playwright/lib/common/index.js:2297:24
+ ❯ Function.describe node_modules/playwright/lib/common/index.js:1219:12
+ ❯ e2e/wizards.spec.ts:71:6
+     69| };
+     70| 
+     71| test.describe('Wizards Page', () => {
+       |      ^
+     72|   test.beforeEach(async ({ page }) => {
+     73|     await page.route('**/api/v1/servers', async (route) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
