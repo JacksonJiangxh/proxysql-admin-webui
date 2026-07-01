@@ -52,9 +52,9 @@ def _reset_all_rate_limiters() -> None:
     for limiter in _all_simple_rate_limiters:
         limiter._store.clear()
 
-    # Also clear the LoginRateLimiter's class-level limiter
-    from app.middleware.rate_limit import LoginRateLimiter
-    LoginRateLimiter._limiter._store.clear()
+    # Also clear the LoginRateLimiter's underlying limiter
+    from app.middleware.rate_limit import _login_limiter
+    _login_limiter._store.clear()
 
 
 # ── Monkey-patch SimpleRateLimiter.__init__ to track instances ──

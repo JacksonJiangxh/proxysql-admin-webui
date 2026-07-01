@@ -9,6 +9,13 @@ from app.utils.helpers import quote_ident
 
 router = APIRouter()
 
+
+# 临时调试：捕获所有异常并返回详细信息
+@router.on_event("startup")
+async def startup():
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+
 # ---------------------------------------------------------------------------
 # ProxySQL table discovery uses SHOW DATABASES + SHOW TABLES FROM <database>.
 #
@@ -95,7 +102,10 @@ async def list_tables(
          - stats_history tables → stats_history group
          - any other db → its own named group
     """
-    host, port, admin_user, password = await get_proxysql_credentials(server_id)
+    try:
+        host, port, admin_user, password = await get_proxysql_credentials(server_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取服务器凭证失败: {type(e).__name__}: {e}")
 
     groups: dict[str, list[str]] = {}
     table_db: dict[str, str] = {}  # table_name → database

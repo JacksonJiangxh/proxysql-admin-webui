@@ -45,7 +45,8 @@ async def test_full_auth_flow(setup_db):
         assert resp.status_code == 200
         tokens = resp.json()
         access_token = tokens["access_token"]
-        refresh_token = tokens["refresh_token"]
+        # refresh_token is set as httpOnly cookie, not in response body
+        refresh_token = resp.cookies.get("refresh_token")
         assert tokens["token_type"] == "bearer"
         assert tokens["user"]["username"] == "admin"
         assert tokens["user"]["role"] == "admin"
@@ -59,11 +60,11 @@ async def test_full_auth_flow(setup_db):
         me = resp.json()
         assert me["username"] == "admin"
 
-        # 3. Refresh token
+        # 3. Refresh token (refresh token is in cookie, set by login response)
         import asyncio
         await asyncio.sleep(1.1)  # ensure different JWT timestamps
         resp = await client.post("/api/v1/auth/refresh", headers={
-            "Authorization": f"Bearer {refresh_token}"
+            "Authorization": f"Bearer {access_token}"
         })
         assert resp.status_code == 200
         new_tokens = resp.json()

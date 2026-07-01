@@ -17,11 +17,11 @@ version: '3.8'
 
 services:
   proxysql-admin-webui:
-    image: docker.cnb.cool/xzydm/proxysql-admin-webui:latest
+    #image: docker.cnb.cool/xzydm/proxysql-admin-webui:latest
     # 如需从源码构建，替换为以下内容：
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
+    build:
+     context: .
+     dockerfile: Dockerfile
     ports:
       - "8080:8080"
     env_file:

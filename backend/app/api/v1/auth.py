@@ -109,6 +109,7 @@ async def login(
         from fastapi.responses import JSONResponse
         resp = JSONResponse(content={
             "access_token": access_token,
+            "token_type": "bearer",
             "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             "user": {
                 "id": user_dict["id"],

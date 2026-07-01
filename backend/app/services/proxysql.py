@@ -7,6 +7,7 @@ Performance optimizations:
 """
 import asyncio
 import aiomysql
+import re
 from typing import Any, Optional
 from contextlib import asynccontextmanager
 
@@ -174,7 +175,6 @@ class ProxySQLService:
         r'^LOAD\s+\w+(\s+\w+)*\s+FROM\s+RUNTIME\s*$',
         r'^SELECT\s+CONFIG\s+.*$',
     ]
-    import re
     _ADMIN_COMMAND_REGEXES = [re.compile(p, re.IGNORECASE) for p in _ADMIN_COMMAND_WHITELIST]
 
     # Valid module name fragments that appear in LOAD/SAVE commands.

@@ -1,0 +1,92 @@
+version: '3.8'
+
+# ProxySQL Admin WebUI — 本地开发测试环境
+#
+# 启动真实的 MySQL + ProxySQL 环境用于开发测试
+#
+# 使用方法：
+#   docker compose -f docker-compose.test.yml up -d
+#   docker compose -f docker-compose.test.yml down -v
+
+services:
+  # MySQL 8.0 作为后端数据库
+  mysql:
+    image: mysql:8.0
+    container_name: proxysql-test-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass
+    ports:
+      - "3306:3306"
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --log-bin=binlog
+      --binlog-format=ROW
+      --server-id=1
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+
+  # ProxySQL 作为中间件
+  proxysql:
+    image: proxysql/proxysql:latest
+    container_name: proxysql-test-proxysql
+    ports:
+      - "6032:6032"  # Admin interface
+      - "6033:6033"  # MySQL interface
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysql", "-h", "127.0.0.1", "-P", "6032", "-u", "admin", "-padmin", "-e", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # 初始化 ProxySQL 配置（连接后端 MySQL）
+  proxysql-init:
+    image: mysql:8.0
+    container_name: proxysql-test-init
+    depends_on:
+      proxysql:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "Configuring ProxySQL to connect to MySQL backend..."
+        # 使用 localhost 连接 ProxySQL admin 接口（共享网络命名空间）
+        mysql -h localhost -P 6032 -u admin -padmin <<-EOSQL
+          -- Add MySQL backend server
+          INSERT INTO mysql_servers (hostgroup_id, hostname, port, weight, comment)
+          VALUES (1, 'mysql', 3306, 1, 'MySQL backend server');
+
+          -- Add MySQL user for ProxySQL
+          INSERT INTO mysql_users (username, password, default_hostgroup, active)
+          VALUES ('testuser', 'testpass', 1, 1);
+
+          -- Load configuration to runtime
+          LOAD MYSQL SERVERS TO RUNTIME;
+          LOAD MYSQL USERS TO RUNTIME;
+          SAVE MYSQL SERVERS TO DISK;
+          SAVE MYSQL USERS TO DISK;
+
+          -- Verify configuration
+          SELECT * FROM mysql_servers;
+          SELECT * FROM mysql_users;
+        EOSQL
+        echo "ProxySQL configuration completed!"
+    network_mode: "service:proxysql"
+    restart: "no"
+
+volumes:
+  mysql_data:
+  proxysql_data:
