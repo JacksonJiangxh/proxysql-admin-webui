@@ -1,4 +1,4 @@
-.PHONY: help install build-frontend run dev-backend dev-frontend test test-frontend lint lint-frontend clean codegen docker-build docker-up docker-down docker-build-test docker-test e2e-test benchmark release-check pre-commit-install
+.PHONY: help install build-frontend run dev-backend dev-frontend test test-frontend test-runner lint lint-frontend clean codegen docker-build docker-up docker-down docker-build-test docker-test e2e-test benchmark release-check pre-commit-install
 
 help:
 	@echo "ProxySQL Admin WebUI - 开发与部署命令"
@@ -15,6 +15,7 @@ help:
 	@echo "  测试:"
 	@echo "  make test              运行后端单元测试"
 	@echo "  make test-frontend     运行前端单元测试 (Vitest)"
+	@echo "  make test-runner       启动交互式 API 测试 shell (自动登录+CSRF)"
 	@echo "  make lint              运行代码检查 (ruff + eslint)"
 	@echo "  make lint-frontend     仅检查前端代码"
 	@echo "  make docker-test       运行 Docker Compose 集成测试"
@@ -55,6 +56,13 @@ test:
 
 test-frontend:
 	cd frontend && npx vitest run --coverage
+
+test-runner:
+	@echo "Starting interactive API test shell..."
+	@echo "Available commands: api_get, api_post, api_put, api_delete"
+	@echo "Example: api_get /api/v1/servers"
+	@echo ""
+	bash --rcfile test_runner.sh
 
 lint:
 	cd backend && ruff check app/

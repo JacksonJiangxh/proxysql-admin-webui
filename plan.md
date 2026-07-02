@@ -269,5 +269,62 @@ curl -s http://localhost:8080/api/v1/health | python3 -m json.tool
 
 ---
 
-*最后更新：2026-07-02 14:57*
-*文档版本：v2.0 — 重构为环境搭建手册 + 持久化追踪机制*
+---
+
+## 六、工具脚本索引
+
+> 本章节记录项目中所有**可复用的工具脚本**。一次性调试脚本已从根目录清理，统一收敛到以下清单。
+
+### 6.1 根目录脚本
+
+| 脚本 | 用途 | 使用方式 |
+|------|------|----------|
+| `test_runner.sh` | 通用 API 测试运行器，自动处理 JWT 登录 + CSRF 认证 | `source test_runner.sh` 后使用 `api_get`/`api_post`/`api_put`/`api_delete` |
+
+### 6.2 `scripts/` 目录
+
+| 脚本 | 用途 | 使用方式 |
+|------|------|----------|
+| `scripts/benchmark.sh` | 性能基准测试 | `make benchmark` 或 `bash scripts/benchmark.sh` |
+| `scripts/check-i18n.js` | 国际化字符串检查 | `node scripts/check-i18n.js` |
+| `scripts/run_e2e_tests.sh` | 端到端测试启动脚本 | `bash scripts/run_e2e_tests.sh` |
+| `scripts/run_integration_tests.sh` | 集成测试启动脚本 | `bash scripts/run_integration_tests.sh` |
+| `scripts/reset_admin_password.py` | 重置/创建 admin 用户密码为 `admin123` | `cd backend && python3 ../scripts/reset_admin_password.py` |
+
+### 6.3 `docker/` 目录（集成测试基础设施）
+
+| 文件 | 用途 |
+|------|------|
+| `docker/Dockerfile.mock` | ProxySQL Mock 服务器镜像 |
+| `docker/docker-compose.test.yml` | 集成测试编排（WebUI + Mock ProxySQL） |
+| `docker/proxysql_mock.py` | Python 实现的 ProxySQL Mock（模拟 MySQL 协议，内存表数据） |
+
+### 6.4 清理记录
+
+> 2026-07-02 根目录大清理，删除了以下一次性调试脚本（其功能已被 `test_runner.sh` 覆盖）：
+
+| 已删除文件 | 原因 |
+|-----------|------|
+| `check_servers.sh` | 临时调试，功能已被 `api_get /api/v1/servers` 覆盖 |
+| `cleanup_and_test_servers.sh` | 硬编码 server ID，一次性脚本 |
+| `fix_proxysql_connection.sh` | 临时修复脚本，问题已永久解决 |
+| `update_server_config.sh` | 与 fix_proxysql_connection 功能重复 |
+| `test_login.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_rbac.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_refresh.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_api.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_auth_complete.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_comprehensive.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_connection.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_dashboard.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_servers.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_servers_complete.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_tables.sh` | 功能已被 `test_runner.sh` 覆盖 |
+| `test_users.py` | 功能已被 `test_runner.sh` 覆盖 |
+| `=5.5.0` | 空文件，误操作产物 |
+| `frontend/vitest_*.txt` (11 个) | 前端单元测试输出日志 |
+
+---
+
+*最后更新：2026-07-02 15:02*
+*文档版本：v2.1 — 根目录脚本大清理 + 工具索引*
