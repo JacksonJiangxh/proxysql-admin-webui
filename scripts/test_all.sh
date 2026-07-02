@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────
-# ProxySQL Admin WebUI — 全层级自动化测试
+# ProxySQL Admin WebUI — 全层级自动化测试 v2
 # ──────────────────────────────────────────────────────────
 # 用法:
-#   bash scripts/test_all.sh              # 运行全部
-#   bash scripts/test_all.sh --quick      # 仅 L0-L3 (无需 Docker)
-#   bash scripts/test_all.sh --api        # 仅 L4-L5 (需要 Docker + 后端)
+#   bash scripts/test_all.sh              # 运行全部 L0-L5
+#   bash scripts/test_all.sh --quick      # 仅 L0-L3 (无需 Docker/后端)
+#   bash scripts/test_all.sh --api        # 仅 L4-L5 (需要 Docker + 后端运行中)
+#   bash scripts/test_all.sh --l0         # 仅 L0 语法检查
+#   bash scripts/test_all.sh --l0123      # L0+L1+L2+L3
 # ──────────────────────────────────────────────────────────
 
 set -euo pipefail
 
-# Determine script directory (bash & zsh compatible)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -20,11 +21,13 @@ FAILED_LEVELS=()
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
 log_pass() { echo -e "${GREEN}✅ $1${NC}"; PASSED=$((PASSED + 1)); }
 log_fail() { echo -e "${RED}❌ $1${NC}"; FAILED=$((FAILED + 1)); FAILED_LEVELS+=("$1"); }
+log_warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 
 run_level() {
     local name="$1"; shift
@@ -42,44 +45,89 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --quick) MODE="quick"; shift ;;
         --api)   MODE="api"; shift ;;
+        --full)  MODE="full"; shift ;;
+        --l0)    MODE="l0"; shift ;;
+        --l0123) MODE="l0123"; shift ;;
         *) shift ;;
     esac
 done
 
-echo -e "${CYAN}ProxySQL Admin WebUI — Automated Test Suite${NC}"
+echo -e "${CYAN}ProxySQL Admin WebUI — Automated Test Suite v2${NC}"
 echo "Root: $ROOT_DIR | Mode: $MODE"
 
 # ── L0: Syntax Check ─────────────────────────────────
-if [[ "$MODE" == "all" || "$MODE" == "quick" ]]; then
-    run_level "L0: Python Syntax Check" python3 "$SCRIPT_DIR/test_l0_syntax.py"
-fi
+run_l0() {
+    echo -e "\n${CYAN}═══ L0: Syntax Check ═══${NC}"
+
+    # L0a: Python syntax
+    run_level "L0a: Python Syntax" python3 "$SCRIPT_DIR/test_l0_syntax.py"
+
+    # L0b: TypeScript type check (quick — just tsc)
+    echo -e "\n── L0b: TypeScript Type Check ──"
+    if command -v npx &>/dev/null; then
+        cd "$ROOT_DIR/frontend"
+        if npx tsc --noEmit 2>&1 | tail -5; then
+            log_pass "L0b: TypeScript Type Check"
+        else
+            log_fail "L0b: TypeScript Type Check"
+        fi
+        cd "$ROOT_DIR"
+    else
+        log_warn "L0b: TypeScript — npx not available, skipping"
+    fi
+}
 
 # ── L1: Import Check ─────────────────────────────────
-if [[ "$MODE" == "all" || "$MODE" == "quick" ]]; then
+run_l1() {
     run_level "L1: Python Import Check" python3 "$SCRIPT_DIR/test_l1_imports.py"
-fi
+}
 
 # ── L2: Static Analysis ──────────────────────────────
-if [[ "$MODE" == "all" || "$MODE" == "quick" ]]; then
-    run_level "L2a: Ruff (Python)" bash -c "cd '$ROOT_DIR/backend' && ruff check app/ --select E,F821,F822,F823,F901 --ignore E501"
-    run_level "L2b: ESLint (TypeScript)" bash -c "cd '$ROOT_DIR/frontend' && npx eslint . --ext ts,tsx --max-warnings 100 2>&1 | tail -5"
-fi
+run_l2() {
+    run_level "L2: Static Analysis" python3 "$SCRIPT_DIR/test_l2_lint.py"
+}
 
 # ── L3: Frontend Build ───────────────────────────────
-if [[ "$MODE" == "all" || "$MODE" == "quick" ]]; then
-    run_level "L3a: TypeScript Check" bash -c "cd '$ROOT_DIR/frontend' && npx tsc --noEmit"
-    run_level "L3b: Vite Build" bash -c "cd '$ROOT_DIR/frontend' && npx vite build --logLevel error"
-fi
+run_l3() {
+    run_level "L3: Frontend Build" python3 "$SCRIPT_DIR/test_l3_frontend.py"
+}
 
 # ── L4: API Smoke Test ───────────────────────────────
-if [[ "$MODE" == "all" || "$MODE" == "api" ]]; then
+run_l4() {
+    echo -e "\n${YELLOW}L4 requires: Docker (MySQL+ProxySQL) + Backend on :8080${NC}"
     run_level "L4: API Smoke Test" python3 "$SCRIPT_DIR/test_l4_api_smoke.py"
-fi
+}
 
 # ── L5: Full-Chain Integration ───────────────────────
-if [[ "$MODE" == "all" || "$MODE" == "api" ]]; then
+run_l5() {
+    echo -e "\n${YELLOW}L5 requires: Docker (MySQL+ProxySQL) + Backend on :8080${NC}"
     run_level "L5: Full-Chain Integration" python3 "$SCRIPT_DIR/test_l5_integration.py"
-fi
+}
+
+# ── Execute based on mode ────────────────────────────
+case "$MODE" in
+    quick|l0123)
+        run_l0
+        run_l1
+        run_l2
+        run_l3
+        ;;
+    api)
+        run_l4
+        run_l5
+        ;;
+    l0)
+        run_l0
+        ;;
+    full|all)
+        run_l0
+        run_l1
+        run_l2
+        run_l3
+        run_l4
+        run_l5
+        ;;
+esac
 
 # ── Summary ──────────────────────────────────────────
 echo -e "\n${CYAN}══════════════════════════════════════════════════${NC}"

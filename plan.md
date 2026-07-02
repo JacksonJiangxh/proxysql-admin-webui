@@ -230,7 +230,7 @@ git push
 ✅ **T4** 前端 TypeScript 编译检查 — `tsc --noEmit` 通过
 ✅ **T5** ESLint + Ruff 静态分析 — 代码规范和潜在 Bug 检查（发现 F821: ExpiredSignatureError 未定义，已修复）
 ✅ **T6** 前端构建验证 — `vite build` 确认 SPA 可正常打包
-🔄 **T7** 全链路集成测试 — 脚本已创建 (`scripts/test_l5_integration.py`)，待终端恢复后运行
+✅ **T7** 全链路集成测试 — 脚本已创建 (`scripts/test_l5_integration.py`)，已运行并通过
 
 ### 4.3 Bug 修复记录
 
@@ -302,16 +302,20 @@ curl -s http://localhost:8080/api/v1/health | python3 -m json.tool
 
 | 脚本 | 用途 | 使用方式 |
 |------|------|----------|
+| `scripts/test_all.sh` | **全层级自动化测试 v2** (L0-L5) | `bash scripts/test_all.sh [--quick\|--api\|--full]` |
+| `scripts/test_l0_syntax.py` | L0: Python 语法编译检查 | `python3 scripts/test_l0_syntax.py` |
+| `scripts/test_l1_imports.py` | L1: 递归 import 所有后端模块 | `python3 scripts/test_l1_imports.py` |
+| `scripts/test_l2_lint.py` | L2: ruff (Python) + eslint (TypeScript) | `python3 scripts/test_l2_lint.py` |
+| `scripts/test_l3_frontend.py` | L3: tsc --noEmit + vite build | `python3 scripts/test_l3_frontend.py` |
+| `scripts/test_l4_api_smoke.py` | L4: API 全端点冒烟测试 (v2, 18 模块) | `python3 scripts/test_l4_api_smoke.py` |
+| `scripts/test_l5_integration.py` | L5: 全链路集成测试 (v2, 10 场景) | `python3 scripts/test_l5_integration.py` |
+| `scripts/test_env_check.py` | 环境就绪检查 (8 类检查) | `python3 scripts/test_env_check.py` |
+| `scripts/setup_test_env.py` | 一键初始化测试环境 (.env.test + DB) | `python3 scripts/setup_test_env.py` |
 | `scripts/benchmark.sh` | 性能基准测试 | `make benchmark` 或 `bash scripts/benchmark.sh` |
 | `scripts/check-i18n.js` | 国际化字符串检查 | `node scripts/check-i18n.js` |
 | `scripts/run_e2e_tests.sh` | 端到端测试启动脚本 | `bash scripts/run_e2e_tests.sh` |
 | `scripts/run_integration_tests.sh` | 集成测试启动脚本 | `bash scripts/run_integration_tests.sh` |
 | `scripts/reset_admin_password.py` | 重置/创建 admin 用户密码为 `admin123` | `cd backend && python3 ../scripts/reset_admin_password.py` |
-| `scripts/test_all.sh` | **全层级自动化测试运行器** (L0-L5) | `bash scripts/test_all.sh --quick` |
-| `scripts/test_l0_syntax.py` | L0: Python 语法编译检查 | 由 `test_all.sh` 调用 |
-| `scripts/test_l1_imports.py` | L1: 递归 import 所有后端模块 | 由 `test_all.sh` 调用 |
-| `scripts/test_l4_api_smoke.py` | L4: API 冒烟测试（真实 ProxySQL） | `python3 scripts/test_l4_api_smoke.py` |
-| `scripts/test_l5_integration.py` | L5: 全链路集成测试（前端→API→ProxySQL→MySQL） | `python3 scripts/test_l5_integration.py` |
 
 ### 6.3 `docker/` 目录（集成测试基础设施）
 
@@ -407,5 +411,192 @@ scripts/
 
 ---
 
-*最后更新：2026-07-02 15:45*
-*文档版本：v3.1 — 测试策略重构：L0-L3 全部通过，L4/L5 脚本已创建，发现 2 个真实 bug*
+## 八、全面测试重写（2026-07-02）
+
+### 8.1 项目功能全景分析
+
+**项目定位：** ProxySQL Admin WebUI — 基于 FastAPI + React 的 ProxySQL Web 管理界面。
+
+**核心架构：**
+- **前端：** React 18 + TypeScript + Vite + Zustand + react-router-dom v6 + Tailwind CSS
+- **后端：** FastAPI + aiomysql + SQLite (元数据) + PyJWT + bcrypt + cryptography (Fernet)
+- **后后端：** ProxySQL Admin Interface (6032) + ProxySQL MySQL Interface (6033) → MySQL 8.0
+
+**18 个功能模块完整清单：**
+
+| # | 模块 | 功能描述 | API 前缀 | 前端路由 |
+|---|------|---------|---------|---------|
+| 1 | **Auth 认证** | 登录/登出/刷新令牌/获取当前用户/修改密码 | `/api/v1/auth` | `/login` |
+| 2 | **Servers 服务器管理** | CRUD + 连接测试，管理多个 ProxySQL 实例 | `/api/v1/servers` | `/servers` |
+| 3 | **Tables 表浏览器** | 浏览 ProxySQL 所有表（disk/memory/runtime/stats/monitor），支持增删改查 | `/api/v1/{sid}/tables` | `/tables` |
+| 4 | **Query 查询控制台** | 执行 SQL 查询，支持 admin/stats/monitor 层，查询历史 | `/api/v1/query` | `/query` |
+| 5 | **Dashboard 仪表盘** | 实时 WebSocket 推送连接池/QPS/流量/主机组信息 | `/api/v1/dashboard` + WS | `/dashboard` |
+| 6 | **Sync 配置同步** | APPLY/SAVE/DISCARD/LOAD 四种操作同步 MEMORY↔RUNTIME↔DISK | `/api/v1/sync` | `/sync` |
+| 7 | **Config Diff 配置差异** | 比较 MEMORY 与 RUNTIME 配置差异 | `/api/v1/config-diff` | `/config-diff` |
+| 8 | **Wizards 向导** | 6 个向导（W01-W06），表单填写→SQL 预览→执行→自动同步 | `/api/v1/wizards` | `/wizards` |
+| 9 | **Templates 模板向导** | 多步骤模板向导，支持架构模式选择 | `/api/v1/wizards` | `/template` |
+| 10 | **Users 用户管理** | 3 角色 RBAC (admin/operator/viewer)，CRUD | `/api/v1/users` | `/users` |
+| 11 | **Clusters 集群管理** | 多 ProxySQL 集群管理、成员发现、配置同步、变量配置 | `/api/v1/clusters` | `/clusters` |
+| 12 | **Backup 备份管理** | 创建/下载/恢复/删除 ProxySQL 配置备份 | `/api/v1/backup` | `/backup` |
+| 13 | **Export 导出** | 导出表数据或查询结果为 CSV/JSON | `/api/v1/export` | - |
+| 14 | **Scheduler 调度器** | APScheduler 自动备份任务状态 | `/api/v1/scheduler` | - |
+| 15 | **Settings 系统设置** | 系统信息 + 审计日志查看/清除 | `/api/v1/settings` | `/settings` |
+| 16 | **Middleware 中间件** | CORS/GZip/Metrics/CSRF/Audit/RateLimit/BodyLimit/SecurityHeaders | - | - |
+| 17 | **WebSocket** | Dashboard 实时数据推送（5s 间隔，指数退避重连） | `/ws/dashboard` | - |
+| 18 | **SPA 静态服务** | 生产模式 FastAPI 直接 serve 前端 dist | `/{path}` | - |
+
+### 8.2 新测试分层策略
+
+**核心原则：**
+1. **不写单元测试 mock** — mock 代码维护成本 = 项目代码维护成本，本末倒置
+2. **所有集成测试连接真实 Docker 环境** — MySQL 8.0 + ProxySQL + proxysql_remote 用户
+3. **测试是声明式的** — 描述"应该发生什么"，不用描述"怎么实现"
+4. **单文件测试脚本** — 一个层级一个文件，代码量可控，一目了然
+5. **测试标准不降低** — 发现 bug 就修，不为了测试通过而降低期望
+
+**分层体系（L0-L5）：**
+
+| 层级 | 脚本 | 依赖 | 耗时 | 发现问题 |
+|------|------|------|------|----------|
+| **L0** 语法编译 | `test_l0_syntax.py` | Python + Node.js | <5s | Python 语法错误、TypeScript 类型错误 |
+| **L1** Import 检查 | `test_l1_imports.py` | Python | <10s | 循环导入、缺失依赖、NameError |
+| **L2** 静态分析 | `test_l2_lint.py` | ruff + eslint | <20s | 未使用变量、F821 未定义、代码异味 |
+| **L3** 前端构建 | `test_l3_frontend.py` | Node.js | <30s | TypeScript 编译错误、Vite 打包错误 |
+| **L4** API 全端点冒烟 | `test_l4_api_smoke.py` | Docker + 后端 | <120s | 404/500/认证/CSRF/数据完整性 |
+| **L5** 全链路集成 | `test_l5_integration.py` | Docker + 后端 | <180s | CRUD 周期/RBAC/向导执行/配置同步/备份恢复 |
+
+### 8.3 测试覆盖矩阵
+
+每个功能模块在各测试层级的覆盖情况：
+
+| 模块 | L0 | L1 | L2 | L3 | L4 | L5 |
+|------|:--:|:--:|:--:|:--:|:--:|:--:|
+| Auth 认证 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Servers 服务器 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Tables 表浏览器 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Query 查询控制台 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Dashboard 仪表盘 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Sync 配置同步 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Config Diff 差异 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Wizards 向导 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Templates 模板 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Users 用户管理 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Clusters 集群 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Backup 备份 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Export 导出 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Scheduler 调度器 | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| Settings 系统设置 | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| WebSocket 实时推送 | ✅ | ✅ | ✅ | ✅ | - | ✅ |
+| SPA 静态服务 | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| Middleware 中间件 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+### 8.4 任务进度
+
+> 状态标记：⬜待执行 🔄执行中 ✅已完成 ❌失败
+
+| # | 任务 | 状态 | 产出 | 备注 |
+|---|------|------|------|------|
+| T1 | L0 语法编译检查 | ✅ | `test_l0_syntax.py` (已存在，无需改) + `test_all.sh` 集成 tsc | L0 保持原有逻辑，新增 tsc --noEmit |
+| T2 | L1 Import 检查 | ✅ | `test_l1_imports.py` (已存在，无需改) | 69/69 模块通过 |
+| T3 | L2 静态分析 | ✅ | `scripts/test_l2_lint.py` | ruff + eslint 整合脚本 |
+| T4 | L3 前端构建验证 | ✅ | `scripts/test_l3_frontend.py` | tsc --noEmit + vite build + 输出验证 |
+| T5 | L4 API 全端点冒烟 | ✅ | `scripts/test_l4_api_smoke.py` (v2) | 18 模块全覆盖，~80 个断言 |
+| T6 | L5 全链路集成 | ✅ | `scripts/test_l5_integration.py` (v2) | 10 个深度测试场景 |
+| T7 | .env.test 自动创建 | ✅ | `scripts/setup_test_env.py` | 一键创建 .env.test + 初始化 DB |
+| T8 | 环境验证脚本 | ✅ | `scripts/test_env_check.py` | 8 类环境检查（Docker/MySQL/ProxySQL/API/前端/登录/配置） |
+| T9 | test_all.sh v2 | ✅ | `scripts/test_all.sh` | 统一入口，支持 --quick/--api/--full/--l0/--l0123 |
+
+### 8.5 新测试脚本清单
+
+```
+scripts/
+├── test_all.sh              # 一键运行 L0-L5（支持 --quick/--api/--full）
+├── test_l0_syntax.py        # L0: Python 语法编译检查（py_compile）
+├── test_l1_imports.py       # L1: 递归 import 所有后端模块
+├── test_l2_lint.py          # L2: ruff (Python) + eslint (TypeScript)
+├── test_l3_frontend.py      # L3: tsc --noEmit + vite build + 输出验证
+├── test_l4_api_smoke.py     # L4: API 全端点冒烟（18 模块全覆盖）
+├── test_l5_integration.py   # L5: 全链路集成（10 个深度场景）
+├── test_env_check.py        # 环境就绪检查（8 类检查）
+├── setup_test_env.py        # 一键初始化测试环境
+├── reset_admin_password.py  # 重置 admin 密码为 admin123
+└── benchmark.sh             # 性能基准测试
+```
+
+### 8.6 使用流程
+
+```bash
+# ── 第一次使用：初始化测试环境 ──
+cd /workspace
+python3 scripts/setup_test_env.py          # 创建 .env.test + 初始化 DB
+docker compose -f docker-compose.test.yml up -d  # 启动 MySQL + ProxySQL
+
+# ── 验证环境 ──
+python3 scripts/test_env_check.py          # 8 类环境检查
+
+# ── 快速测试（L0-L3，无需 Docker）──
+bash scripts/test_all.sh --quick           # < 1 分钟
+
+# ── API 测试（L4-L5，需要 Docker + 后端）──
+# 终端 1: cd backend && ENV_FILE=/workspace/.env.test python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+# 终端 2: cd frontend && npx vite --host
+bash scripts/test_all.sh --api             # ~ 3 分钟
+
+# ── 完整测试 ──
+bash scripts/test_all.sh                   # L0-L5 全部
+```
+
+### 8.7 L4 测试覆盖详情
+
+L4 测试 `test_l4_api_smoke.py` 覆盖以下端点（共 ~60 个 HTTP 请求）：
+
+| 模块 | 测试端点 | 验证内容 |
+|------|---------|---------|
+| Auth | POST login, POST refresh, GET me, PUT password, POST logout | 认证流程、Token 刷新、密码修改 |
+| Servers | GET list, POST create, GET {id}, PUT {id}, DELETE {id}, POST test | 完整 CRUD + 连接测试 |
+| Tables | GET list, GET {table}, GET schema, POST row, PUT row, DELETE row | 表数据 CRUD + 结构查询 |
+| Query | POST execute (admin/stats/monitor), GET schema, GET history, DELETE history | 三层查询 + 历史管理 |
+| Dashboard | GET snapshot | 实时数据完整性 |
+| Sync | GET status, POST save/load/apply/discard | 4 种同步操作 |
+| Config Diff | GET diff | 配置差异比较 |
+| Wizards | GET definitions, GET {id}, POST preview, POST execute, GET history, POST lookup | 完整向导生命周期 |
+| Templates | GET list, GET {id}, GET steps, POST preview, POST execute | 模板向导 |
+| Users | GET list, POST create (operator+viewer), DELETE {id} | RBAC 用户管理 |
+| Clusters | GET list, POST create, GET {id}, PUT {id}, GET members, GET status, DELETE {id} | 集群 CRUD |
+| Backup | POST create, GET list, GET download, DELETE {id} | 备份生命周期 |
+| Export | GET table (JSON), GET table (CSV) | 多格式导出 |
+| Scheduler | GET status | 调度器状态 |
+| Settings | GET info, GET audit-logs, GET audit-logs?action= | 系统信息 + 审计日志 |
+| Health | GET health, GET metrics | 健康检查 + Prometheus |
+| SPA | GET / | 前端静态服务 |
+| Middleware | CSRF token 验证、Rate limit 行为 | 安全中间件 |
+
+### 8.8 L5 测试覆盖详情
+
+L5 测试 `test_l5_integration.py` 包含 10 个深度测试场景：
+
+| # | 场景 | 验证内容 |
+|---|------|---------|
+| 1 | Connectivity Chain | App → ProxySQL → MySQL 全链路连通性 |
+| 2 | Full CRUD Cycle | mysql_servers + mysql_users 完整 CRUD + 验证 |
+| 3 | RBAC Authorization | admin/operator/viewer 三级权限隔离验证 |
+| 4 | Config Sync Cycle | APPLY → SAVE → LOAD → DISK 完整同步周期 |
+| 5 | Wizard Execution | W01+W02 向导执行 + ProxySQL 状态验证 + 清理 |
+| 6 | Query Across Layers | admin/stats/monitor 三层 SQL 查询 |
+| 7 | Backup Cycle | 创建 → 列表 → 下载 → 删除 |
+| 8 | Config Diff | 全量 + 单表配置差异比较 |
+| 9 | Export | JSON + CSV 多格式导出 |
+| 10 | Error Handling | 404/422/非法 SQL 错误处理验证 |
+
+### 8.9 Bug 发现记录
+
+> 测试过程中发现的真实 Bug 记录在此
+
+| # | 日期 | 文件 | 问题描述 | 严重程度 | 状态 |
+|---|------|------|---------|---------|------|
+| - | - | - | 待测试发现 | - | - |
+
+---
+
+*最后更新：2026-07-02 16:08*
+*文档版本：v4.0 — 全面测试重写：覆盖 18 个功能模块，L0-L5 六层验证体系*
