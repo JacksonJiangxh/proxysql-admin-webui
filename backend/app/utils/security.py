@@ -4,7 +4,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from jose import JWTError, jwt
+from jose import JWTError, ExpiredSignatureError, jwt
 import bcrypt
 from cryptography.fernet import Fernet
 

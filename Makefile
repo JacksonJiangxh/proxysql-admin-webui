@@ -15,6 +15,9 @@ help:
 	@echo "  测试:"
 	@echo "  make test              运行后端单元测试"
 	@echo "  make test-frontend     运行前端单元测试 (Vitest)"
+	@echo "  make test-quick        快速测试 L0-L3 (无需 Docker)"
+	@echo "  make test-api          真实环境 API 冒烟测试 (需要 Docker + 后端)"
+	@echo "  make test-full         全层级测试 L0-L5"
 	@echo "  make test-runner       启动交互式 API 测试 shell (自动登录+CSRF)"
 	@echo "  make lint              运行代码检查 (ruff + eslint)"
 	@echo "  make lint-frontend     仅检查前端代码"
@@ -56,6 +59,15 @@ test:
 
 test-frontend:
 	cd frontend && npx vitest run --coverage
+
+test-quick:
+	bash scripts/test_all.sh --quick
+
+test-api:
+	bash scripts/test_all.sh --api
+
+test-full:
+	bash scripts/test_all.sh
 
 test-runner:
 	@echo "Starting interactive API test shell..."
