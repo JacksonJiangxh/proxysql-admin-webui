@@ -207,6 +207,27 @@ async def health_check():
     }
 
 
+# Debug endpoint to check if frontend assets are configured correctly
+@app.get("/api/v1/debug/assets-info", tags=["Debug"])
+async def assets_info():
+    """Debug endpoint to check frontend assets configuration."""
+    # Check if assets dir was mounted
+    _assets_dir_path = None
+    _assets_mounted = False
+    if not _DEV_MODE and _FRONTEND_DIST.is_dir():
+        _assets_dir_path = _FRONTEND_DIST / "assets"
+        _assets_mounted = _assets_dir_path.exists()
+    
+    return {
+        "frontend_dist": str(_FRONTEND_DIST),
+        "frontend_dist_exists": _FRONTEND_DIST.exists(),
+        "frontend_dist_is_dir": _FRONTEND_DIST.is_dir() if _FRONTEND_DIST.exists() else False,
+        "assets_dir": str(_assets_dir_path) if _assets_dir_path else "not configured",
+        "assets_mounted": _assets_mounted,
+        "dev_mode": _DEV_MODE,
+    }
+
+
 @app.get("/api/v1/metrics", tags=["System"])
 async def prometheus_metrics():
     """Prometheus /metrics endpoint returning OpenMetrics text format.
@@ -244,7 +265,11 @@ if not _DEV_MODE and _FRONTEND_DIST.is_dir():
     # Mount static assets (js/css/images) at /assets.
     _ASSETS_DIR = _FRONTEND_DIST / "assets"
     if _ASSETS_DIR.is_dir():
-        app.mount("/assets", StaticFiles(directory=str(_ASSETS_DIR)), name="assets")
+        # Use StaticFiles with check_dir=False for better compatibility
+        app.mount("/assets", StaticFiles(directory=str(_ASSETS_DIR), check_dir=False), name="assets")
+        print(f"[StaticFiles] Mounted /assets at {_ASSETS_DIR}")
+    else:
+        print(f"[StaticFiles] WARNING: assets directory not found at {_ASSETS_DIR}")
 
     _INDEX_HTML = _FRONTEND_DIST / "index.html"
 

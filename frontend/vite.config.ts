@@ -52,8 +52,13 @@ export default defineConfig({
         manualChunks(id) {
           // Group node_modules by package
           if (id.includes('node_modules')) {
-            // React core + router
-            if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/react-router-dom/') || id.includes('/react-router/')) {
+            // React core + router + react ecosystem deps
+            // Group ALL react-related deps together to prevent circular
+            // dependencies between vendor-react and vendor-misc chunks.
+            // (e.g. scheduler depends on react, @remix-run/router depends on react)
+            if (id.includes('/react/') || id.includes('/react-dom/')
+                || id.includes('/react-router-dom/') || id.includes('/react-router/')
+                || id.includes('/@remix-run/') || id.includes('/scheduler/')) {
               return 'vendor-react'
             }
             // TanStack Query

@@ -12,6 +12,7 @@ interface AuthState {
   user: User | null
   token: string | null          // access_token (memory only, not localStorage)
   isAuthenticated: boolean
+  isInitialized: boolean        // true after checkAuth() has completed (prevents flash of login page)
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
@@ -22,6 +23,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,   // access_token is memory-only (not in localStorage for XSS safety)
   isAuthenticated: false,
+  isInitialized: false,
 
   login: async (username: string, password: string) => {
     const resp = await apiClient.post('/api/v1/auth/login', { username, password })
@@ -51,9 +53,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   checkAuth: async () => {
     try {
       const resp = await apiClient.get('/api/v1/auth/me')
-      set({ user: resp.data, isAuthenticated: true })
+      set({ user: resp.data, isAuthenticated: true, isInitialized: true })
     } catch {
-      set({ user: null, token: null, isAuthenticated: false })
+      set({ user: null, token: null, isAuthenticated: false, isInitialized: true })
     }
   },
 

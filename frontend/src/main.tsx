@@ -24,6 +24,21 @@ const queryClient = new QueryClient({
   },
 })
 
+// Expose auth store to window for the axios interceptor (client.ts).
+// This avoids a circular import between authStore.ts and client.ts.
+// Must be set BEFORE rendering so the interceptor can read token during
+// the initial checkAuth() call below.
+window.__AUTH_STORE__ = {
+  get token() { return useAuthStore.getState().token },
+  setToken(token: string | null) { useAuthStore.getState().setToken(token) },
+}
+
+// On app startup, try to restore the user session via the httpOnly
+// refresh_token cookie. If the cookie is still valid the backend will
+// issue a new access_token and return the user profile, so the user
+// does NOT have to re-login after every page refresh.
+useAuthStore.getState().checkAuth()
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <I18nProvider>
@@ -39,10 +54,3 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </I18nProvider>
   </React.StrictMode>,
 )
-
-// Expose auth store to window for the axios interceptor (client.ts).
-// This avoids a circular import between authStore.ts and client.ts.
-window.__AUTH_STORE__ = {
-  get token() { return useAuthStore.getState().token },
-  setToken(token: string | null) { useAuthStore.getState().setToken(token) },
-}

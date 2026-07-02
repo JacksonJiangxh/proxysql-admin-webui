@@ -46,7 +46,7 @@ const iconColorMap: Record<ToastType, string> = {
   info: 'text-blue-500 dark:text-blue-400',
 }
 
-const ANIMATION_DURATION = 400
+const ANIMATION_DURATION = 300
 
 /**
  * Unified toast/notification system.

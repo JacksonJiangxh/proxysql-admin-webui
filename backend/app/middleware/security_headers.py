@@ -27,17 +27,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     # - Same-origin scripts, styles, images, fonts, connections
     # - Inline styles (needed by React and many UI libraries)
     # - 'unsafe-inline' for styles is the only relaxation
+    # - script-src 'self' is sufficient for same-origin SPA deployments.
+    #   We deliberately avoid 'strict-dynamic' because the Vite build output
+    #   uses <script type="module" src="..."> without nonces, which would be
+    #   blocked by 'strict-dynamic'.
     CSP_POLICY = (
         "default-src 'self'; "
         "script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
-        "font-src 'self'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
         "connect-src 'self'; "
         "frame-src 'none'; "
         "object-src 'none'; "
         "base-uri 'self'; "
         "form-action 'self'; "
+        "worker-src 'self' blob:; "
     )
 
     # Check if the request came over HTTPS (directly or via proxy)

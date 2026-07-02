@@ -34,7 +34,13 @@ const BackupPage = lazy(() => import(/* webpackChunkName: "page-BackupPage" */ '
 import MainLayout from './components/layout/MainLayout'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, isInitialized } = useAuthStore()
+  // Show loading spinner while checkAuth() is still in-flight.
+  // This prevents a flash of the login page when the user has a valid
+  // refresh_token cookie but the auth check hasn't completed yet.
+  if (!isInitialized) {
+    return <LoadingFallback />
+  }
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
