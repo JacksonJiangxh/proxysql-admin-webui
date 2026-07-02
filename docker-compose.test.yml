@@ -63,8 +63,12 @@ services:
     command:
       - |
         echo "Configuring ProxySQL to connect to MySQL backend..."
-        # 使用 localhost 连接 ProxySQL admin 接口（共享网络命名空间）
-        mysql -h localhost -P 6032 -u admin -padmin <<-EOSQL
+        # 使用 127.0.0.1 连接 ProxySQL admin 接口（TCP连接，避免Unix socket）
+        mysql -h 127.0.0.1 -P 6032 -u admin -padmin <<-EOSQL
+          -- Clear existing configuration
+          DELETE FROM mysql_servers WHERE hostgroup_id=1 AND hostname='mysql' AND port=3306;
+          DELETE FROM mysql_users WHERE username='testuser';
+
           -- Add MySQL backend server
           INSERT INTO mysql_servers (hostgroup_id, hostname, port, weight, comment)
           VALUES (1, 'mysql', 3306, 1, 'MySQL backend server');
@@ -72,6 +76,11 @@ services:
           -- Add MySQL user for ProxySQL
           INSERT INTO mysql_users (username, password, default_hostgroup, active)
           VALUES ('testuser', 'testpass', 1, 1);
+
+          -- Create remote admin user (admin user can only connect locally, so we create a different username)
+          UPDATE global_variables SET variable_value='admin:admin;proxysql_remote:remote123' WHERE variable_name='admin-admin_credentials';
+          LOAD ADMIN VARIABLES TO RUNTIME;
+          SAVE ADMIN VARIABLES TO DISK;
 
           -- Load configuration to runtime
           LOAD MYSQL SERVERS TO RUNTIME;
@@ -82,6 +91,7 @@ services:
           -- Verify configuration
           SELECT * FROM mysql_servers;
           SELECT * FROM mysql_users;
+          SELECT * FROM global_variables WHERE variable_name LIKE 'admin-admin_credentials';
         EOSQL
         echo "ProxySQL configuration completed!"
     network_mode: "service:proxysql"

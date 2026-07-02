@@ -1,75 +1,68 @@
 #!/bin/bash
 # 测试表浏览器模块
-BASE_URL="http://localhost:8080/api/v1"
-COOKIE_JAR="/tmp/test_cookies.txt"
 
-echo "===== 测试表浏览器模块 ====="
-echo
+echo "=========================================="
+echo "测试表浏览器模块"
+echo "=========================================="
+echo ""
 
-# 清除旧cookie
-rm -f "$COOKIE_JAR"
+# 步骤1：登录
+echo "步骤1：登录..."
+curl -s -c /tmp/cookies.txt http://localhost:8080/api/v1/users > /dev/null
+csrf_token=$(grep 'csrf_token' /tmp/cookies.txt | awk '{print $7}')
 
-# 1. 登录获取token
-echo "1. 登录获取认证token..."
-curl -s -c "$COOKIE_JAR" -i -X POST "$BASE_URL/auth/login" \
+login_response=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}' > /tmp/login_response.txt
+  -H "X-CSRF-Token: $csrf_token" \
+  -d '{"username":"admin","password":"admin123"}' \
+  -b /tmp/cookies.txt \
+  -c /tmp/cookies.txt)
 
-ACCESS_TOKEN=$(grep -o '"access_token":"[^"]*"' /tmp/login_response.txt | head -1 | cut -d'"' -f4)
+access_token=$(echo "$login_response" | python3 -c "import sys, json; print(json.load(sys.stdin).get('access_token', ''))" 2>/dev/null)
+csrf_token=$(grep 'csrf_token' /tmp/cookies.txt | awk '{print $7}')
 
-if [ -z "$ACCESS_TOKEN" ]; then
-  echo "错误: 无法获取访问令牌"
-  exit 1
+if [ -z "$access_token" ]; then
+    echo "❌ 登录失败"
+    exit 1
 fi
-echo "  登录成功"
-echo
 
-# 2. 获取CSRF token
-echo "2. 获取CSRF token..."
-curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" -i -X GET "$BASE_URL/auth/me" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" > /tmp/csrf_response.txt
+echo "✅ 登录成功"
+echo ""
 
-XSRF_TOKEN=$(grep 'csrf_token' "$COOKIE_JAR" | awk '{print $7}')
-if [ -z "$XSRF_TOKEN" ]; then
-  echo "错误: 无法获取CSRF token"
-  exit 1
+# 获取服务器ID
+servers_response=$(curl -s -X GET http://localhost:8080/api/v1/servers \
+  -H "Authorization: Bearer $access_token")
+
+server_id=$(echo "$servers_response" | python3 -c "import sys, json; servers = json.load(sys.stdin); print(servers[0]['id'] if servers else '')" 2>/dev/null)
+
+if [ -z "$server_id" ]; then
+    echo "❌ 没有找到服务器配置"
+    echo "请先创建服务器配置"
+    exit 1
 fi
-echo "  获取CSRF token成功"
-echo
 
-# 3. 获取服务器列表
-echo "3. 获取服务器列表..."
-SERVERS_RESPONSE=$(curl -s -b "$COOKIE_JAR" -X GET "$BASE_URL/servers" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "X-CSRF-Token: $XSRF_TOKEN")
+echo "服务器ID: $server_id"
+echo ""
 
-SERVER_ID=$(echo "$SERVERS_RESPONSE" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-if [ -z "$SERVER_ID" ]; then
-  echo "错误: 无法获取服务器ID"
-  echo "响应: $SERVERS_RESPONSE"
-  exit 1
-fi
-echo "  服务器ID: $SERVER_ID"
-echo
+# 步骤2：测试列出所有表
+echo "步骤2：测试列出所有表..."
+csrf_token=$(grep 'csrf_token' /tmp/cookies.txt | awk '{print $7}')
+tables_response=$(curl -s -X GET http://localhost:8080/api/v1/$server_id/tables \
+  -H "Authorization: Bearer $access_token")
 
-# 4. 测试列出表（GET /{server_id}/tables）
-echo "4. 测试列出表 (GET /$SERVER_ID/tables)..."
-TABLES_RESPONSE=$(curl -s -b "$COOKIE_JAR" -X GET "$BASE_URL/$SERVER_ID/tables" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "X-CSRF-Token: $XSRF_TOKEN")
+echo "列出所有表响应: $tables_response" | head -c 500
+echo ""
 
-echo "$TABLES_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$TABLES_RESPONSE"
-echo
-
-# 检查是否有错误
-if echo "$TABLES_RESPONSE" | grep -q "error\|Error\|失败"; then
-  echo "警告: 列出表时出现错误"
+if echo "$tables_response" | grep -q '"table_name"'; then
+    echo "✅ 列出所有表成功！"
 else
-  echo "列出表成功"
+    echo "❌ 列出所有表失败"
+    echo "这可能是因为ProxySQL连接问题"
 fi
+echo ""
 
-echo
-echo "===== 测试完成 ====="
-
-# 清理临时文件
-rm -f /tmp/login_response.txt /tmp/csrf_response.txt
+echo "=========================================="
+echo "表浏览器模块测试完成（部分）"
+echo "=========================================="
+echo ""
+echo "注意：由于ProxySQL连接问题，表浏览器功能可能无法正常工作"

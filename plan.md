@@ -1,557 +1,273 @@
-## 用户需求
+# ProxySQL Admin WebUI — 唯一计划与测试追踪文档
 
-项目进行了版本代码迭代后，更新后的代码无法正常运行。要求以开发模式热重载方式，全面测试、修复 bug、优化，直到项目所有功能逻辑和函数都能正常运行。
-
-## 明确错误
-
-从 Docker 日志中确认的第一个关键错误：
-
-- 文件：/workspace/backend/app/services/proxysql.py
-- 错误位置：第 177 行
-- 错误信息：NameError: name 're' is not defined. Did you forget to import 're'?
-- 根本原因：第 177 行的 `import re` 缩进错误，被放在了类体内而非文件顶部导入区域，导致类定义时 `re` 模块不可用
-
-## 测试环境要求
-
-使用 Docker 在本机运行 MySQL + ProxySQL 完整环境作为后端，用于测试项目功能。测试标准不降低，所有测试都是为了找出源码中存在的 bug 和逻辑错误。
-
-## 功能范围
-
-项目包含以下主要功能模块需要全面测试：
-
-- 认证模块（JWT 认证、多用户 RBAC）
-- 仪表盘（实时监控、WebSocket 推送）
-- 配置向导（63 个引导式表单 W01-W63）
-- 表浏览器（查看/编辑所有 ProxySQL 配置表）
-- SQL 控制台（多目标执行）
-- 配置同步（DISK ↔ MEMORY ↔ RUNTIME）
-- 配置差异（三层差异可视化）
-- 多实例管理
-- 集群管理
-- 备份与恢复
-- 导出功能
-- 调度器
-- 审计日志
-- 国际化与暗色主题
-
-## 技术栈
-
-- 后端：FastAPI + Python 3.10+ + aiomysql + aiosqlite
-- 前端：React 18 + TypeScript + Vite + Tailwind CSS
-- 数据库：SQLite（应用元数据）+ MySQL（测试后端）+ ProxySQL（被测目标）
-- 容器化：Docker + Docker Compose
-- 测试：pytest + vitest + playwright
-
-## 实施方法
-
-### 1. 修复启动失败（关键路径）
-
-**问题定位**：
-
-- `/workspace/backend/app/services/proxysql.py` 第 8-11 行是导入区域
-- 第 177 行 `import re` 错误地缩进在类体内
-- 第 178 行类属性 `_ADMIN_COMMAND_REGEXES` 在类定义时执行，此时 `re` 未定义
-
-**修复方案**：
-将第 177 行 `import re` 移至文件顶部导入区域（第 11 行之后），并删除类体内的 `import re`。
-
-**类似问题检查**：
-
-- `/workspace/backend/app/services/wizard_engine.py` 第 85 行也有函数内的 `import re`，虽功能可行但不符合 PEP8，建议移至文件顶部
-
-### 2. Docker 测试环境搭建
-
-**架构设计**：
-
-```
-┌─────────────────────────────────────────┐
-│         Docker 测试环境                   │
-│  ┌──────────┐      ┌──────────┐       │
-│  │  MySQL 8  │─────► ProxySQL  │       │
-│  │  :3306    │      │  :6032    │       │
-│  └──────────┘      └──────────┘       │
-└─────────────────────────────────────────┘
-         ▲ MySQL 协议
-         │
-┌─────────────────────────────────────────┐
-│         本地应用服务                      │
-│  ┌──────────┐      ┌──────────┐       │
-│  │ FastAPI   │      │  Vite    │       │
-│  │ :8080     │      │  :5173    │       │
-│  │ (--reload)│      │ (HMR)    │       │
-│  └──────────┘      └──────────┘       │
-└─────────────────────────────────────────┘
-```
-
-**Docker Compose 配置**：
-创建 `docker-compose.test.yml`：
-
-- MySQL 8.0 容器（官方镜像 `mysql:8.0`）
-- ProxySQL 2.7 容器（官方镜像 `proxysql/proxysql:2.7`）
-- 配置 ProxySQL 连接 MySQL 作为后端
-
-**或使用项目已有的 Mock 方案**：
-
-- 项目已有 `/workspace/docker/docker-compose.test.yml`
-- 已有 `/workspace/docker/proxysql_mock.py` 轻量级 Mock 服务器
-- 可先使用 Mock 进行基础测试，再用真实环境进行完整测试
-
-### 3. 开发模式热重载配置
-
-- 后端：`make dev-backend` → `DEV_MODE=true uvicorn --reload`
-- 前端：`make dev-frontend` → `vite`（自带 HMR）
-
-### 4. 测试执行策略
-
-**阶段一：修复启动**
-
-1. 修复 `proxysql.py` 的 `import re` 问题
-2. 验证后端能否启动
-
-**阶段二：搭建环境**
-
-1. 启动 Docker 测试环境（MySQL + ProxySQL 或 Mock）
-2. 配置 `.env` 连接到测试环境
-
-**阶段三：功能测试**
-按模块逐个测试，发现 bug 立即修复，然后继续测试。
-
-**阶段四：自动化测试**
-
-1. 运行 `make test`（后端单元测试）
-2. 运行 `make test-frontend`（前端单元测试）
-3. 运行 `make lint`（代码检查）
-4. 修复所有失败的测试
-
-### 5. 目录结构（将要修改/创建的文件）
-
-```
-/workspace/
-├── docker-compose.test.yml     # [NEW] MySQL + ProxySQL 测试环境配置
-├── .env.test                   # [NEW] 测试环境环境变量
-├── backend/
-│   ├── app/
-│   │   └── services/
-│   │       └── proxysql.py     # [MODIFY] 修复 import re 缩进问题
-│   │       └── wizard_engine.py # [MODIFY] 可选：修复 import re 位置
-│   └── tests/
-│       └── ...                 # [MODIFY] 修复失败的测试用例
-├── frontend/
-│   └── ...                     # [MODIFY] 修复前端 bug
-```
-
-## 关键代码修改
-
-### proxysql.py 修复方案
-
-**修改前**（第 8-11 行，第 177-178 行）：
-
-```python
-# 第 8-11 行
-import asyncio
-import aiomysql
-from typing import Any, Optional
-from contextlib import asynccontextmanager
-
-# ...
-
-    # 第 177-178 行（在类体内）
-    import re
-    _ADMIN_COMMAND_REGEXES = [re.compile(p, re.IGNORECASE) for p in _ADMIN_COMMAND_WHITELIST]
-```
-
-**修改后**：
-
-```python
-# 第 8-12 行
-import asyncio
-import aiomysql
-import re  # 添加此处
-from typing import Any, Optional
-from contextlib import asynccontextmanager
-
-# ...
-
-    # 第 170-171 行（移除类体内的 import re）
-    _ADMIN_COMMAND_REGEXES = [re.compile(p, re.IGNORECASE) for p in _ADMIN_COMMAND_WHITELIST]
-```
+> **本文档是项目唯一的计划+测试追踪文件。** 所有任务计划、测试进度、Bug 修复记录、环境配置全部集中于此。切换开发设备后，只需按本文档操作即可完整复现测试环境和测试进度。
 
 ---
 
-## 任务执行进度
+## 一、测试环境搭建
 
-### ✅ 已完成任务
+### 1.1 前置依赖
 
-#### 1. 修复启动失败（已完成）
-- ✅ 修复 `backend/app/services/proxysql.py` 第 177 行 `import re` 缩进错误
-- ✅ 验证后端成功启动
+| 依赖 | 最低版本 | 用途 |
+|------|---------|------|
+| Docker + Docker Compose | 20.10+ | 运行 MySQL + ProxySQL 容器 |
+| Python | 3.12+ | 后端开发服务器 |
+| Node.js | 20+ | 前端 Vite 开发服务器 |
+| mysql-client (宿主机) | 8.0+ | 用于 `mysql` CLI 工具（连接 ProxySQL 排查问题） |
 
-**修复详情**：
-- 将第 177 行 `import re` 移至文件顶部导入区域（第 11 行之后）
-- 删除类体内的 `import re`
-- 提交哈希：b447d3a
+### 1.2 启动 Docker 基础服务（MySQL + ProxySQL）
 
-#### 2. Docker 测试环境搭建（已完成）
-- ✅ 创建 `docker-compose.test.yml` 配置 MySQL 8.0 + ProxySQL 2.7
-- ✅ 启动测试环境容器
-- ✅ 配置 ProxySQL 连接 MySQL 作为后端
-
-**环境配置**：
-- MySQL 容器：端口 3306，用户名 root，密码 testpass123
-- ProxySQL 容器：管理端口 6032，用户 admin，密码 admin
-- 后端端口：8080（FastAPI）
-- 前端端口：5173（Vite）
-
-#### 3. 开发模式启动（已完成）
-- ✅ 以开发模式启动后端（`uvicorn --reload`）
-- ✅ 以开发模式启动前端（`vite` HMR）
-- ✅ 验证热重载功能正常
-
-#### 4. 认证模块测试（已完成）
-- ✅ 测试登录功能（JWT token 获取）
-- ✅ 测试令牌刷新功能
-- ✅ 测试 RBAC 权限控制
-- ✅ 修复密码哈希不匹配问题
-
-**修复详情**：
-- 问题：数据库中 admin 用户的密码哈希与 `admin123` 不匹配
-- 解决：使用 `hash_password('admin123')` 重新生成密码哈希并更新数据库
-- 提交哈希：9d3c3f3
-
-#### 5. 服务器配置管理模块测试（已完成）
-- ✅ 测试创建服务器配置（POST /api/v1/servers）
-- ✅ 测试获取服务器列表（GET /api/v1/servers）
-- ✅ 测试获取服务器详情（GET /api/v1/servers/{id}）
-- ✅ 测试更新服务器配置（PUT /api/v1/servers/{id}）
-- ✅ 测试删除服务器配置（DELETE /api/v1/servers/{id}）
-- ✅ 测试设置默认服务器（PUT /api/v1/servers/{id}/set-default）
-- ✅ 修复 CSRF token 获取问题
-
-**修复详情**：
-- 问题：POST/PUT/DELETE 请求返回 403 CSRF 验证失败
-- 原因：测试脚本未正确发送 cookie
-- 解决：使用 `-b /tmp/cookies.txt` 发送 cookie，并从 cookie 中提取 CSRF token
-- 提交哈希：9d3c3f3
-
-**已知问题**：
-- 连接测试（POST /api/v1/servers/{id}/test-connection）失败
-- 错误：`User 'admin' can only connect locally`
-- 原因：ProxySQL admin 接口 ACL 配置问题
-- 状态：待修复（不影响其他功能测试）
-
-#### 6. 用户管理模块测试（已完成）
-- ✅ 测试获取用户列表（GET /api/v1/users）
-- ✅ 测试创建用户（POST /api/v1/users）
-- ✅ 测试更新用户（PUT /api/v1/users/{id}）
-- ✅ 测试删除用户（DELETE /api/v1/users/{id}）
-
-**测试结果**：所有功能正常，使用本地 SQLite 数据库，不依赖 ProxySQL 连接
-
-#### 7. 代码语法修复（已完成）
-- ✅ 修复 `backend/app/api/v1/tables.py` 第 105 行语法错误
-- ✅ 验证后端重新加载成功
-
-**修复详情**：
-- 问题：tables.py 第 105 行有空的 `try:` 块，导致语法错误
-- 解决：移除空的 `try:` 块
-- 提交哈希：9d3c3f3
-
----
-
-### ⏳ 未完成任务
-
-#### 8. 表浏览器模块测试（待处理）
-**优先级**：高  
-**依赖**：服务器配置管理模块  
-**状态**：代码语法已修复，等待 ProxySQL 连接问题修复
-
-**测试内容**：
-- [ ] 测试列出所有表（GET /api/v1/{server_id}/tables）
-- [ ] 测试获取表数据（GET /api/v1/{server_id}/tables/{table}/data）
-- [ ] 测试更新表数据（PUT /api/v1/{server_id}/tables/{table}/data）
-- [ ] 测试删除表数据（DELETE /api/v1/{server_id}/tables/{table}/data）
-- [ ] 测试搜索功能
-- [ ] 测试分页功能
-
-**已知问题**：
-- ProxySQL 连接失败：`User 'admin' can only connect locally`
-- 需要修复 ProxySQL ACL 配置
-
-**修复建议**：
-1. 进入 ProxySQL 容器：`docker exec -it proxysql-test-proxysql bash`
-2. 连接 ProxySQL admin 接口：`mysql -h 127.0.0.1 -P 6032 -u admin -padmin`
-3. 更新 ACL 配置：
-   ```sql
-   UPDATE global_variables SET variable_value='0.0.0.0/0' WHERE variable_name='admin-admin_acl';
-   LOAD ADMIN VARIABLES TO RUNTIME;
-   SAVE ADMIN VARIABLES TO DISK;
-   ```
-4. 重启 ProxySQL 容器：`docker restart proxysql-test-proxysql`
-
-#### 9. 仪表盘模块测试（待处理）
-**优先级**：高  
-**依赖**：表浏览器模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 测试获取实时监控数据（GET /api/v1/dashboard/stats）
-- [ ] 测试 WebSocket 连接和推送
-- [ ] 测试连接数监控
-- [ ] 测试查询性能监控
-- [ ] 测试错误率监控
-
-#### 10. SQL 控制台模块测试（待处理）
-**优先级**：高  
-**依赖**：表浏览器模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 测试执行 SQL 查询（POST /api/v1/sql/execute）
-- [ ] 测试多目标执行
-- [ ] 测试查询历史记录
-- [ ] 测试查询结果的格式化显示
-
-#### 11. 配置同步模块测试（待处理）
-**优先级**：中  
-**依赖**：表浏览器模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 测试 DISK → MEMORY 同步
-- [ ] 测试 MEMORY → RUNTIME 同步
-- [ ] 测试 RUNTIME → MEMORY 同步
-- [ ] 测试 MEMORY → DISK 同步
-- [ ] 测试全量同步
-
-#### 12. 配置差异模块测试（待处理）
-**优先级**：中  
-**依赖**：配置同步模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 测试 DISK vs MEMORY 差异
-- [ ] 测试 MEMORY vs RUNTIME 差异
-- [ ] 测试 DISK vs RUNTIME 差异
-- [ ] 测试差异可视化展示
-
-#### 13. 配置向导模块测试（待处理）
-**优先级**：中  
-**依赖**：表浏览器模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 测试 W01-W63 向导表单加载
-- [ ] 测试表单数据提交
-- [ ] 测试配置预览
-- [ ] 测试配置执行
-
-#### 14. 集群管理模块测试（待处理）
-**优先级**：低  
-**依赖**：服务器配置管理模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 测试集群组创建
-- [ ] 测试集群组管理
-- [ ] 测试跨节点配置同步
-- [ ] 测试集群状态监控
-
-#### 15. 备份与恢复模块测试（待处理）
-**优先级**：低  
-**依赖**：表浏览器模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 测试配置备份
-- [ ] 测试配置恢复
-- [ ] 测试备份文件管理
-- [ ] 测试导出功能
-
-#### 16. 调度器模块测试（待处理）
-**优先级**：低  
-**依赖**：备份与恢复模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 测试定时备份任务创建
-- [ ] 测试任务调度
-- [ ] 测试任务执行历史
-
-#### 17. 用户管理与审计日志模块测试（待处理）
-**优先级**：中  
-**依赖**：认证模块  
-**状态**：部分完成（用户管理已完成，审计日志待测试）
-
-**测试内容**：
-- [ ] 测试审计日志记录
-- [ ] 测试审计日志查询
-- [ ] 测试审计日志导出
-
-#### 18. 国际化与暗色主题测试（待处理）
-**优先级**：低  
-**依赖**：无  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 测试中英文切换
-- [ ] 测试暗色主题切换
-- [ ] 测试主题持久化
-
-#### 19. 后端单元测试（待处理）
-**优先级**：高  
-**依赖**：所有功能模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 运行 `make test`
-- [ ] 修复失败的测试用例
-- [ ] 提高测试覆盖率
-
-#### 20. 前端单元测试（待处理）
-**优先级**：高  
-**依赖**：所有功能模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 运行 `make test-frontend`
-- [ ] 修复失败的测试用例
-- [ ] 提高测试覆盖率
-
-#### 21. 代码检查（待处理）
-**优先级**：中  
-**依赖**：所有代码修改  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 运行 `make lint`
-- [ ] 修复代码质量问题
-- [ ] 统一代码风格
-
-#### 22. 集成测试（待处理）
-**优先级**：高  
-**依赖**：所有功能模块  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 运行 `make docker-test`
-- [ ] 修复端到端测试失败
-- [ ] 验证完整业务流程
-
-#### 23. 最终验证（待处理）
-**优先级**：高  
-**依赖**：所有测试通过  
-**状态**：未开始
-
-**测试内容**：
-- [ ] 以生产模式构建后端
-- [ ] 以生产模式构建前端
-- [ ] 验证生产模式正常运行
-- [ ] 性能测试
-
----
-
-## 后续执行建议
-
-### 第一阶段：修复测试环境（预计 1-2 小时）
-1. 修复 ProxySQL ACL 配置问题
-2. 验证表浏览器模块可以正常连接 ProxySQL
-3. 编写测试脚本验证所有 API 端点
-
-### 第二阶段：功能测试（预计 3-5 天）
-按以下顺序逐个测试功能模块：
-1. 表浏览器模块（任务 8）
-2. 仪表盘模块（任务 9）
-3. SQL 控制台模块（任务 10）
-4. 配置同步模块（任务 11）
-5. 配置差异模块（任务 12）
-6. 配置向导模块（任务 13）
-7. 集群管理模块（任务 14）
-8. 备份与恢复模块（任务 15）
-9. 调度器模块（任务 16）
-10. 审计日志模块（任务 17）
-11. 国际化与暗色主题（任务 18）
-
-每个模块测试流程：
-1. 阅读 API 文档和前端代码
-2. 编写测试脚本或使用前端界面手动测试
-3. 记录发现的 bug
-4. 修复 bug
-5. 重新测试验证修复
-6. 提交代码
-
-### 第三阶段：自动化测试（预计 1-2 天）
-1. 运行后端单元测试并修复失败用例
-2. 运行前端单元测试并修复失败用例
-3. 运行代码检查并修复质量问题
-4. 运行集成测试并修复端到端测试失败
-
-### 第四阶段：最终验证（预计 0.5-1 天）
-1. 以生产模式构建和运行
-2. 性能测试
-3. 编写测试报告
-
----
-
-## 测试脚本和工具
-
-### 已创建的测试脚本
-- `/workspace/test_servers.sh` - 服务器配置管理模块测试脚本
-- `/workspace/test_tables.sh` - 表浏览器模块测试脚本（待完善）
-- `/workspace/test_users.py` - 用户管理模块测试脚本
-
-### 推荐使用的测试工具
-- **后端 API 测试**：curl、httpie、pytest
-- **前端测试**：vitest、playwright
-- **数据库测试**：sqlite3、mysql client
-- **Mock 服务**：`/workspace/docker/proxysql_mock.py`
-
----
-
-## 常见问题和处理方法
-
-### 1. ProxySQL 连接问题
-**症状**：`User 'admin' can only connect locally`  
-**原因**：ProxySQL admin 接口 ACL 配置限制  
-**解决**：
-```sql
-UPDATE global_variables SET variable_value='0.0.0.0/0' WHERE variable_name='admin-admin_acl';
-LOAD ADMIN VARIABLES TO RUNTIME;
-SAVE ADMIN VARIABLES TO DISK;
-```
-
-### 2. CSRF token 验证失败
-**症状**：403 Forbidden - CSRF token missing or invalid  
-**原因**：未正确发送 cookie 或 CSRF token  
-**解决**：
-- 使用 `-c /tmp/cookies.txt` 保存 cookie
-- 使用 `-b /tmp/cookies.txt` 发送 cookie
-- 从 cookie 中提取 `csrf_token` 并添加到 `X-CSRF-Token` 请求头
-
-### 3. 后端无响应
-**症状**：curl 请求超时  
-**原因**：后端进程崩溃或死锁  
-**解决**：
 ```bash
-# 杀死后端进程
-kill -9 $(ps aux | grep uvicorn | grep -v grep | awk '{print $2}')
+# 启动测试用 MySQL 和 ProxySQL
+docker compose -f docker-compose.test.yml up -d
 
-# 重启后端
-cd /workspace/backend && nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload > /tmp/backend.log 2>&1 &
+# 等待健康检查通过（约 30-60 秒）
+docker compose -f docker-compose.test.yml ps
+# 期望看到 proxysql-test-mysql (healthy) 和 proxysql-test-proxysql (healthy)
+
+# 查看初始化日志（确认远程用户创建成功）
+docker logs proxysql-test-init
 ```
 
-### 4. 数据库锁定
-**症状**：SQLite database is locked  
-**原因**：多个进程同时访问 SQLite 数据库  
-**解决**：
-- 确保只有一个后端进程运行
-- 使用 `timeout` 参数配置 SQLite 连接
+### 1.3 ⚠️ ProxySQL Admin 用户的核心陷阱
+
+**这是整个测试环境最关键的知识点，必须理解：**
+
+- **ProxySQL 的 `admin` 用户只能通过本地连接（localhost/127.0.0.1/Unix socket）访问 Admin 接口**。这是 ProxySQL 内置的安全机制：名为 `admin` 的用户默认只接受本地连接。
+- **任何远程 TCP 连接（即使是同一台宿主机的非 lo 网卡 IP）都必须使用非 `admin` 用户名**。
+- 因此 `docker-compose.test.yml` 的初始化脚本中做了两件事：
+  1. 通过 127.0.0.1 连接 ProxySQL，执行 `LOAD/SAVE ADMIN VARIABLES`
+  2. 添加第二个管理用户：`proxysql_remote:remote123`
+
+**如果你只创建了 `admin:admin` 用户，WebUI 后端通过 TCP 连接 ProxySQL 时会收到 `Access denied for user 'admin'`**，因为 WebUI 使用的是网络连接而非 Unix socket。
+
+```bash
+# 验证 ProxySQL 用户配置（本地连接 admin 用户可用）
+mysql -h 127.0.0.1 -P 6032 -u admin -padmin -e "SELECT * FROM global_variables WHERE variable_name='admin-admin_credentials';"
+
+# 验证远程用户可用（WebUI 将使用此用户连接）
+mysql -h 127.0.0.1 -P 6032 -u proxysql_remote -premote123 -e "SELECT 1;"
+```
+
+### 1.4 Docker 服务配置清单
+
+**`docker-compose.test.yml`** 文件位于项目根目录 `/workspace/docker-compose.test.yml`，包含：
+
+| 容器 | 镜像 | 端口 | 关键配置 |
+|------|------|------|----------|
+| `proxysql-test-mysql` | mysql:8.0 | 3306 | root/rootpass, testuser/testpass, binlog开启 |
+| `proxysql-test-proxysql` | proxysql/proxysql:latest | 6032(admin), 6033(mysql) | admin:admin + proxysql_remote:remote123 |
+| `proxysql-test-init` | mysql:8.0 | 共享 proxysql 网络 | 自动配置 backend + 创建远程用户 |
+
+初始化脚本执行的操作：
+1. 向 `mysql_servers` 添加 MySQL backend（hostgroup_id=1）
+2. 向 `mysql_users` 添加应用用户（testuser/testpass）
+3. 更新 `admin-admin_credentials` 为 `admin:admin;proxysql_remote:remote123`
+4. 执行 `LOAD ... TO RUNTIME` + `SAVE ... TO DISK` 持久化
+
+### 1.5 应用配置（.env.test）
+
+**`/workspace/.env.test`** — 测试专用配置文件，与生产 `.env` 完全隔离：
+
+| 配置项 | 值 | 说明 |
+|--------|-----|------|
+| `SECRET_KEY` | `test-secret-key-min-32-chars!!` | 测试固定密钥 |
+| `FERNET_KEY` | `02F01gw2gjGLev9LC_hGdPYx4cyU4qEAyWWAA4Pa85g=` | 用于加密存储的 ProxySQL 密码 |
+| `DATABASE_URL` | `sqlite:///data/app_test.db` | 应用元数据库（独立于生产 DB） |
+| `PROXYSQL_DEFAULT_HOST` | `127.0.0.1` | Docker ProxySQL 映射到宿主机 |
+| `PROXYSQL_DEFAULT_PORT` | `6032` | ProxySQL Admin 端口 |
+| `PROXYSQL_DEFAULT_USER` | **`proxysql_remote`** | ⚠️ 必须是非 admin 的远程用户 |
+| `PROXYSQL_DEFAULT_PASSWORD` | `remote123` | 远程用户密码 |
+| `PROXYWEB_ADMIN_USER` | `admin` | WebUI 登录用户名 |
+| `PROXYWEB_ADMIN_PASSWORD` | `admin123` | WebUI 登录密码 |
+| `RATE_LIMIT_ENABLED` | `false` | 测试环境禁用限流 |
+| `CACHE_ENABLED` | `false` | 测试环境禁用缓存 |
+
+### 1.6 启动应用服务
+
+```bash
+# ── 终端 1: 启动后端（开发模式，热重载）──
+cd /workspace/backend
+ENV_FILE=/workspace/.env.test python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+
+# ── 终端 2: 启动前端（Vite HMR）──
+cd /workspace/frontend
+npx vite --host
+```
+
+**注意**：`ENV_FILE` 必须使用**绝对路径**。相对路径在 uvicorn 工作目录不是 `/workspace/` 时会找不到文件。
+
+### 1.7 首次初始化（仅新环境执行一次）
+
+```bash
+# 如果 app_test.db 不存在或 admin 密码无效，手动初始化：
+cd /workspace/backend
+python3 -c "
+import sqlite3, bcrypt, os
+os.makedirs('data', exist_ok=True)
+h = bcrypt.hashpw(b'admin123', bcrypt.gensalt()).decode()
+c = sqlite3.connect('data/app_test.db')
+c.execute('''
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    is_admin INTEGER DEFAULT 1,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )
+''')
+c.execute('SELECT id FROM users WHERE username=\"admin\"')
+if c.fetchone():
+    c.execute('UPDATE users SET password_hash=? WHERE username=\"admin\"', (h,))
+else:
+    c.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', ('admin', h))
+c.commit()
+c.close()
+print('Database initialized: admin/admin123')
+"
+```
+
+### 1.8 环境验证清单
+
+逐项检查，确保环境就绪：
+
+```bash
+# 1. Docker 容器健康
+docker compose -f docker-compose.test.yml ps | grep healthy
+
+# 2. MySQL backend 可达
+mysql -h 127.0.0.1 -P 3306 -u testuser -ptestpass -e "SELECT 1 AS mysql_ok;"
+
+# 3. ProxySQL admin 本地连接
+mysql -h 127.0.0.1 -P 6032 -u admin -padmin -e "SELECT 1 AS proxysql_local_ok;"
+
+# 4. ProxySQL 远程用户连接（WebUI 使用的连接方式）
+mysql -h 127.0.0.1 -P 6032 -u proxysql_remote -premote123 -e "SELECT 1 AS proxysql_remote_ok;"
+
+# 5. ProxySQL → MySQL 查询链路
+mysql -h 127.0.0.1 -P 6033 -u testuser -ptestpass -e "SELECT 1 AS proxy_chain_ok;"
+
+# 6. 后端 API 健康检查
+curl -s http://localhost:8080/api/v1/health | python3 -m json.tool
+
+# 7. 前端 Vite 可访问
+curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/
+# 期望输出: 200
+
+# 8. 登录 API
+curl -s -c /tmp/cookies.txt -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | python3 -m json.tool
+```
 
 ---
 
-## 联系和支持
+## 二、持久化追踪机制
 
-如果在测试过程中遇到问题，可以：
-1. 查看后端日志：`tail -f /tmp/backend.log`
-2. 查看前端日志：浏览器开发者工具 Console 选项卡
-3. 查看 Docker 容器日志：`docker logs proxysql-test-proxysql`
-4. 参考项目文档：`/workspace/docs/`
+### 2.1 唯一计划文档原则
+
+- **本文档（`plan.md`）是项目唯一的计划和追踪文件。** 不再创建分散的 plan 文件、日志文件、checklist 文件。
+- **所有任务必须先写入本文档再执行。** 执行前在「当前任务」章节添加任务条目，标记状态为 🔄。
+- **每完成一个任务/子任务立即更新本文档。** 标记为 ✅ 或 ❌，附简要结果。
+- 切换开发设备后，只需 `git pull` + 阅读本文档 + 按第一章搭建环境，即可完全复现。
+
+### 2.2 任务状态标记规范
+
+| 标记 | 含义 |
+|------|------|
+| ⬜ | 待执行 |
+| 🔄 | 执行中 |
+| ✅ | 已完成 |
+| ❌ | 失败（附失败原因） |
+| ⏸️ | 暂停/阻塞 |
+
+### 2.3 Git 同步
+
+```bash
+# 每次更新 plan.md 后建议 commit，确保远程也有最新追踪状态
+git add plan.md
+git commit -m "tracking: update plan.md progress"
+git push
+```
+
+---
+
+## 三、当前环境状态
+
+| 组件 | 状态 | 详情 |
+|------|------|------|
+| MySQL 8.0 | ✅ 运行中 | `proxysql-test-mysql:3306`, root/rootpass, testuser/testpass |
+| ProxySQL | ✅ 运行中 | `proxysql-test-proxysql:6032`, admin:admin + proxysql_remote:remote123 |
+| 后端 (FastAPI) | ✅ 运行中 | `:8080`, 热重载, `ENV_FILE=/workspace/.env.test` |
+| 前端 (Vite) | ✅ 运行中 | `[::1]:5173`, HMR |
+| 应用DB | ✅ app_test.db | SQLite, 路径 `data/app_test.db` |
+| 服务器配置ID | ✅ 88bf5473 | proxysql_remote:remote123@127.0.0.1:6032 |
+
+---
+
+## 四、当前任务
+
+> 格式：`[状态] [日期] 任务描述 — 结果摘要`
+
+### 4.1 已完成的里程碑
+
+| # | 日期 | 任务 | 状态 | 备注 |
+|---|------|------|------|------|
+| M1 | 2026-07-02 | 搭建 Docker 测试环境 (MySQL + ProxySQL) | ✅ | 含 proxysql_remote 远程用户 |
+| M2 | 2026-07-02 | 15 模块全功能冒烟测试 | ✅ | 全部通过 |
+| M3 | 2026-07-02 | 修复测试中发现的 10 个 Bug | ✅ | 详见 4.3 |
+| M4 | 2026-07-02 | 文档重构：环境搭建 + 追踪机制 | ✅ | 当前版本 |
+
+### 4.2 待执行任务
+
+> 新任务添加在此区域，执行前改 🔄，完成后移到 4.1。
+
+### 4.3 Bug 修复记录
+
+| # | 文件 | 问题 | 修复 | 状态 |
+|---|------|------|------|------|
+| 1 | `services/dashboard_service.py:25-29` | `traffic` 查询引用不存在的 `Queries` 列 | 改为 `SUM(Total_cnt)` | ✅ |
+| 2 | `services/dashboard_service.py:71-78` | `query_digest` 使用 SQLite `?` 占位符 | 改为 f-string LIMIT | ✅ |
+| 3 | `schemas/dashboard.py:55` | `QueryDigestEntry` 含不存在的 `avg_time` 字段 | 移除该字段 | ✅ |
+| 4 | `schemas/sync.py:15-21` | `SyncStatusResponse` 字段与 service 返回不匹配 | 改为 `total_unapplied/total_unsaved` | ✅ |
+| 5 | `schemas/sync.py:24-42` | `SyncActionResult` 字段与 service 返回不匹配 | 改为 `results/total/succeeded/failed` | ✅ |
+| 6 | `services/sync_service.py` | `sync_action` 对子表报 Unknown module 错误 | 添加 `_SUB_TABLES` 集合，子表静默跳过 | ✅ |
+| 7 | `config.py` → 运行时 | `ENV_FILE=.env.test` 相对路径无效 | 改用绝对路径 | ✅ |
+| 8 | `database.py` | `app_test.db` 中 admin 密码 hash 无效 | 重新 hash_password('admin123') | ✅ |
+| 9 | `proxysql.py:177` (历史) | `import re` 缩进错误导致 NameError | 移至文件顶部 | ✅ |
+| 10 | `tables.py:105` (历史) | 空 try 块语法错误 | 移除空 try 块 | ✅ |
+
+---
+
+## 五、启动命令速查
+
+```bash
+# ── Docker 环境 ──
+docker compose -f docker-compose.test.yml up -d          # 启动
+docker compose -f docker-compose.test.yml down -v        # 彻底销毁（含数据卷）
+docker compose -f docker-compose.test.yml ps             # 查看状态
+docker logs proxysql-test-init                           # 查看初始化日志
+
+# ── 后端 ──
+cd /workspace/backend
+ENV_FILE=/workspace/.env.test python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+
+# ── 前端 ──
+cd /workspace/frontend
+npx vite --host
+
+# ── ProxySQL 直接查询 ──
+mysql -h 127.0.0.1 -P 6032 -u admin -padmin              # 本地管理（admin 用户）
+mysql -h 127.0.0.1 -P 6032 -u proxysql_remote -premote123 # 远程管理（WebUI 用此用户）
+mysql -h 127.0.0.1 -P 6033 -u testuser -ptestpass        # 通过 ProxySQL 查询 MySQL
+
+# ── API 快速验证 ──
+curl -s http://localhost:8080/api/v1/health | python3 -m json.tool
+```
+
+---
+
+*最后更新：2026-07-02 14:57*
+*文档版本：v2.0 — 重构为环境搭建手册 + 持久化追踪机制*

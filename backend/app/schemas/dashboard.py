@@ -53,7 +53,6 @@ class QueryDigestEntry(BaseModel):
     sum_time: float = Field(default=0, description="Total execution time (seconds).")
     min_time: float = Field(default=0, description="Minimum execution time (seconds).")
     max_time: float = Field(default=0, description="Maximum execution time (seconds).")
-    avg_time: float = Field(default=0, description="Average execution time (seconds).")
 
 
 class DashboardSnapshotResponse(BaseModel):

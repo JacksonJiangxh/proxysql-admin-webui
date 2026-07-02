@@ -16,9 +16,8 @@ class SyncStatusResponse(BaseModel):
     """Full sync status across all config tables."""
     server_id: str = Field(description="ProxySQL server identifier.")
     tables: list[dict[str, Any]] = Field(description="Per-table sync status.")
-    total_tables: int = Field(description="Total tables checked.")
-    in_sync_count: int = Field(description="Tables fully in sync.")
-    out_of_sync_count: int = Field(description="Tables with pending changes.")
+    total_unapplied: int = Field(default=0, description="Tables with unapplied changes.")
+    total_unsaved: int = Field(default=0, description="Tables with unsaved changes.")
 
 
 class SyncActionResult(BaseModel):
@@ -27,16 +26,7 @@ class SyncActionResult(BaseModel):
         description="Action performed: 'apply', 'save', 'discard', or 'load'.",
         examples=["apply", "save"],
     )
-    success: bool = Field(description="Whether the action completed successfully.")
-    tables_affected: Optional[int] = Field(
-        default=None,
-        description="Number of tables affected.",
-    )
-    message: Optional[str] = Field(
-        default=None,
-        description="Human-readable result message.",
-    )
-    details: Optional[dict[str, Any]] = Field(
-        default=None,
-        description="Detailed per-table results.",
-    )
+    results: list[dict[str, Any]] = Field(default_factory=list, description="Per-table results.")
+    total: int = Field(default=0, description="Total tables processed.")
+    succeeded: int = Field(default=0, description="Tables successfully processed.")
+    failed: int = Field(default=0, description="Tables that failed.")

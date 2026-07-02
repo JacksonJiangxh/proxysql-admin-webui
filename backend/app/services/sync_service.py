@@ -28,6 +28,9 @@ class SyncService:
     ]
 
     # Module to LOAD/SAVE command mapping
+    # Only tables that correspond to independent LOAD/SAVE modules are listed.
+    # Sub-tables (e.g., mysql_collations, mysql_firewall_*) are handled
+    # implicitly by their parent module commands and are silently skipped here.
     CONFIG_MODULES = {
         "mysql_servers": "MYSQL SERVERS",
         "mysql_users": "MYSQL USERS",
@@ -40,6 +43,19 @@ class SyncService:
         "pgsql_variables": "PGSQL VARIABLES",
         "proxysql_servers": "PROXYSQL SERVERS",
         "scheduler": "SCHEDULER",
+    }
+    # Tables that are implicitly synced by their parent module (no separate command).
+    _SUB_TABLES = {
+        "mysql_aws_aurora_hostgroups", "mysql_collations",
+        "mysql_firewall_whitelist_rules", "mysql_firewall_whitelist_sqli_fingerprints",
+        "mysql_firewall_whitelist_users", "mysql_galera_hostgroups",
+        "mysql_group_replication_hostgroups", "mysql_hostgroup_attributes",
+        "mysql_query_rules_fast_routing", "mysql_replication_hostgroups",
+        "mysql_servers_ssl_params", "pgsql_firewall_whitelist_rules",
+        "pgsql_firewall_whitelist_sqli_fingerprints", "pgsql_firewall_whitelist_users",
+        "pgsql_hostgroup_attributes", "pgsql_ldap_mapping",
+        "pgsql_query_rules_fast_routing", "pgsql_replication_hostgroups",
+        "pgsql_servers_ssl_params", "restapi_routes",
     }
 
     async def get_sync_status(
@@ -166,7 +182,11 @@ class SyncService:
                             break
 
             if module is None:
-                results.append({"table": table, "success": False, "error": f"Unknown module for table: {table}"})
+                if table in self._SUB_TABLES:
+                    # Sub-tables are handled implicitly by parent module
+                    results.append({"table": table, "success": True, "skipped": True})
+                else:
+                    results.append({"table": table, "success": False, "error": f"Unknown module for table: {table}"})
                 continue
 
             sql = sql_templates[action].format(module=module)

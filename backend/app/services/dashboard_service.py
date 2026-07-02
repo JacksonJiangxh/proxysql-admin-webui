@@ -24,7 +24,7 @@ class DashboardService:
         """,
         "traffic": """
             SELECT
-                SUM(Queries) as queries
+                SUM(Total_cnt) as queries
             FROM stats_mysql_commands_counters
         """,
         "memory": """
@@ -70,11 +70,10 @@ class DashboardService:
         try:
             digest_rows = await proxysql_service.execute_query(
                 host, port, user, password,
-                """SELECT hostgroup, schemaname, username, digest_text,
-                   count_star, sum_time, min_time, max_time, avg_time
+                f"""SELECT hostgroup, schemaname, username, digest_text,
+                   count_star, sum_time, min_time, max_time
                    FROM stats_mysql_query_digest
-                   ORDER BY sum_time DESC LIMIT ?""",
-                [digest_limit]
+                   ORDER BY sum_time DESC LIMIT {int(digest_limit)}"""
             )
             results["query_digest"] = digest_rows
         except Exception as e:
