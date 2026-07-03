@@ -242,7 +242,7 @@ from app.services.wizards import (  # noqa: E402
     QueryErrorAnalysisWizard, ConnectionPoolMonitorWizard,
     RealtimeProcessListWizard, UserConnectionStatsWizard,
     BackendTopologyWizard, GlobalStatusWizard, GtidSyncStatusWizard,
-    ClusterStatusWizard,
+    ClusterStatusWizard, MonitorCheckModeWizard,
     ConfigBackupWizard, ConfigRestoreWizard, FlushQueryCacheWizard,
     MultiplexingVariablesWizard, LoggingEventsWizard, MonitorVariablesWizard,
     AdminUserManagementWizard, NetworkInterfaceWizard, ClusterNodeWizard,

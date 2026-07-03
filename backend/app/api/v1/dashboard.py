@@ -98,13 +98,22 @@ async def dashboard_ws(
                     "server_id": server_id,
                     "data": snapshot,
                 }))
+            except WebSocketDisconnect:
+                # Client disconnected during send — exit the outer loop cleanly
+                return
             except Exception as e:
                 # Surface the error but keep the connection alive so the client
                 # can recover once the backend becomes reachable again.
-                await websocket.send_text(json.dumps({
-                    "type": "error",
-                    "message": str(e),
-                }))
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "message": str(e),
+                    }))
+                except WebSocketDisconnect:
+                    return
+                except RuntimeError:
+                    # Connection already closed — stop pushing
+                    return
             await asyncio.sleep(interval)
     except WebSocketDisconnect:
         return

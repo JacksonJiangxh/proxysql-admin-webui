@@ -1,4 +1,6 @@
 """Template wizard API endpoints — multi-step guided setup."""
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
@@ -13,6 +15,7 @@ from app.services.sync_service import sync_service, SyncAction
 from app.utils.db_helpers import get_proxysql_credentials
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ── Request models ──────────────────────────────────────
@@ -304,29 +307,45 @@ async def execute_template(
             })
             all_ok = False
 
-    # Store in wizard history
+    # Store in wizard history (non-critical — do not fail the request if it errors)
     from app.database import get_db
     import json
-    db = await get_db()
     try:
-        await db.execute(
-            """INSERT INTO wizard_history
-               (user_id, server_id, wizard_id, wizard_name, category,
-                submitted_fields, executed_sql, auto_apply, auto_save, success, error_message)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user["id"], data.server_id, data.template_id,
-             template.name, "template",
-             json.dumps({"shared": data.shared_values, "steps": data.step_values,
-                         "skipped": data.skipped_steps, "mode": data.architecture_mode}),
-             json.dumps(all_sql),
-             1 if auto_apply else 0,
-             1 if auto_save else 0,
-             1 if all_ok else 0,
-             None if all_ok else "Some steps failed")
-        )
-        await db.commit()
-    finally:
-        await db.close()
+        db = await get_db()
+        try:
+            user_cursor = await db.execute("SELECT id FROM users WHERE id = ?", (user["id"],))
+            if not await user_cursor.fetchone():
+                logger.warning("template_history: user_id=%s not found in users table", user["id"])
+            else:
+                server_cursor = await db.execute(
+                    "SELECT id FROM server_configs WHERE id = ?", (data.server_id,)
+                )
+                if not await server_cursor.fetchone():
+                    logger.warning(
+                        "template_history: server_id=%s not found in server_configs table",
+                        data.server_id,
+                    )
+                else:
+                    await db.execute(
+                        """INSERT INTO wizard_history
+                           (user_id, server_id, wizard_id, wizard_name, category,
+                            submitted_fields, executed_sql, auto_apply, auto_save, success, error_message)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (user["id"], data.server_id, data.template_id,
+                         template.name, "template",
+                         json.dumps({"shared": data.shared_values, "steps": data.step_values,
+                                     "skipped": data.skipped_steps, "mode": data.architecture_mode}),
+                         json.dumps(all_sql),
+                         1 if auto_apply else 0,
+                         1 if auto_save else 0,
+                         1 if all_ok else 0,
+                         None if all_ok else "Some steps failed")
+                    )
+                    await db.commit()
+        finally:
+            await db.close()
+    except Exception as exc:
+        logger.warning("Failed to persist template_history: %s", exc)
 
     return {
         "ok": all_ok,

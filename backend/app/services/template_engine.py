@@ -379,6 +379,170 @@ TEMPLATES: dict[str, TemplateDefinition] = {
             ],
         },
     ),
+    "T02": TemplateDefinition(
+        id="T02",
+        name="MGR Monitor Health Check Template",
+        description="One-click deployment of MGR-aware health check monitoring. "
+                    "Configure ProxySQL to accurately detect MySQL Group Replication "
+                    "member status (ONLINE/RECOVERING/OFFLINE) and role (PRIMARY/SECONDARY).",
+        icon="shield",
+        architecture_options=[
+            {
+                "value": "mgr_single_primary",
+                "label": "MGR Single-Primary",
+                "description": "MGR single-primary mode — one writer, rest are readers",
+                "icon": "shield",
+                "topology_type": "group_replication",
+            },
+            {
+                "value": "mgr_multi_primary",
+                "label": "MGR Multi-Primary",
+                "description": "MGR multi-primary mode — all nodes can accept writes",
+                "icon": "shuffle",
+                "topology_type": "group_replication",
+            },
+            {
+                "value": "replication",
+                "label": "Traditional Replication",
+                "description": "Standard async replication with read_only check",
+                "icon": "git-branch",
+                "topology_type": "replication",
+            },
+            {
+                "value": "galera",
+                "label": "Galera Cluster",
+                "description": "Galera/PXC cluster health check via wsrep",
+                "icon": "link",
+                "topology_type": "galera",
+            },
+        ],
+        shared_fields=[
+            WizardField("monitor_username", "Monitor Username", "text",
+                        required=True, default="monitor",
+                        help_text="MySQL user for health checks (must exist on all backends with "
+                                  "SELECT on performance_schema.replication_group_members for MGR)"),
+            WizardField("monitor_password", "Monitor Password", "password",
+                        required=True, default="monitor",
+                        help_text="Password for the monitor user"),
+            WizardField("writer_hostgroup", "Writer Hostgroup", "number",
+                        required=True, default=0,
+                        help_text="Hostgroup number for PRIMARY/writer nodes"),
+            WizardField("reader_hostgroup", "Reader Hostgroup", "number",
+                        required=True, default=1,
+                        help_text="Hostgroup number for SECONDARY/reader nodes"),
+            WizardField("offline_hostgroup", "Offline Hostgroup", "number",
+                        required=True, default=2,
+                        help_text="Hostgroup number for OFFLINE/unavailable nodes"),
+        ],
+        shared_field_mappings={
+            "monitor_username": [
+                ("W64", "monitor_username"),
+            ],
+            "monitor_password": [
+                ("W64", "monitor_password"),
+            ],
+            "writer_hostgroup": [
+                ("W64", "writer_hostgroup"),
+                ("W01", "hostgroup_id"),
+            ],
+            "reader_hostgroup": [
+                ("W64", "reader_hostgroup"),
+            ],
+            "offline_hostgroup": [
+                ("W64", "offline_hostgroup"),
+            ],
+        },
+        common_steps=[
+            TemplateStep(
+                wizard_id="W01",
+                title="Add MySQL Backend Servers",
+                description="Add your MGR/replication cluster members as ProxySQL backend servers",
+                guide="Enter each MySQL node's address and port. All nodes go to the writer hostgroup "
+                      "first — ProxySQL monitor will automatically move nodes to the correct hostgroup "
+                      "based on their MGR role once health checks are configured.",
+                skip_allowed=False,
+                overrides=[
+                    TemplateStepOverride("hostgroup_id", hidden=True),  # auto from shared
+                    TemplateStepOverride("hostname", required=True),
+                    TemplateStepOverride("port", default=3306),
+                    TemplateStepOverride("status", default="ONLINE"),
+                    TemplateStepOverride("weight", default=1),
+                    TemplateStepOverride("max_connections", default=1000),
+                    TemplateStepOverride("max_replication_lag", default=30),
+                    TemplateStepOverride("use_ssl", default=0),
+                    TemplateStepOverride("max_latency_ms", default=0),
+                    TemplateStepOverride("comment", hidden=True),
+                    TemplateStepOverride("hostname", is_array=True, array_min=1),
+                    TemplateStepOverride("port", is_array=True, array_min=1),
+                    TemplateStepOverride("weight", is_array=True, array_min=1),
+                    TemplateStepOverride("max_connections", is_array=True, array_min=1),
+                    TemplateStepOverride("max_replication_lag", is_array=True, array_min=1),
+                ],
+            ),
+            TemplateStep(
+                wizard_id="W09",
+                title="Create Monitor User",
+                description="Create the monitor user credentials in ProxySQL",
+                guide="This user must also exist on all MySQL backends with the same credentials. "
+                      "For MGR mode, this user needs SELECT privilege on "
+                      "performance_schema.replication_group_members, "
+                      "performance_schema.replication_group_member_stats, and "
+                      "performance_schema.global_status.",
+                skip_allowed=False,
+                overrides=[
+                    TemplateStepOverride("username", required=True),
+                    TemplateStepOverride("password", required=True),
+                    TemplateStepOverride("default_hostgroup", hidden=True),
+                    TemplateStepOverride("active", default=1),
+                    TemplateStepOverride("max_connections", default=100),
+                    TemplateStepOverride("transaction_persistent", default=0),
+                    TemplateStepOverride("fast_forward", default=0),
+                    TemplateStepOverride("schema_locked", default=0),
+                    TemplateStepOverride("default_schema", default=""),
+                    TemplateStepOverride("comment", default="monitor-user"),
+                    TemplateStepOverride("comment", hidden=True),
+                ],
+            ),
+            TemplateStep(
+                wizard_id="W64",
+                title="Configure Monitor Check Mode",
+                description="Select and configure the health-check strategy for your architecture",
+                guide="This step configures how ProxySQL monitors backend MySQL nodes. "
+                      "Choose the mode that matches your cluster architecture:\n\n"
+                      "- **MGR Single/Multi-Primary**: Uses performance_schema.replication_group_members "
+                      "to detect each node's exact MGR status and role.\n"
+                      "- **Replication**: Uses read_only flag to identify primary vs replica.\n"
+                      "- **Galera**: Uses wsrep status for cluster health detection.\n\n"
+                      "ProxySQL will automatically move nodes between hostgroups based on their health status. "
+                      "The mysql_servers table will show ONLINE for healthy nodes and OFFLINE for unreachable ones.",
+                skip_allowed=False,
+                overrides=[
+                    TemplateStepOverride("mode", required=True),
+                    TemplateStepOverride("monitor_username", hidden=True),  # auto from shared
+                    TemplateStepOverride("monitor_password", hidden=True),  # auto from shared
+                    TemplateStepOverride("writer_hostgroup", hidden=True),  # auto from shared
+                    TemplateStepOverride("reader_hostgroup", hidden=True),  # auto from shared
+                    TemplateStepOverride("offline_hostgroup", hidden=True),  # auto from shared
+                    TemplateStepOverride("backup_writer_hostgroup", default=3),
+                    TemplateStepOverride("max_writers", default=1),
+                    TemplateStepOverride("writer_is_also_reader", default=2),
+                    TemplateStepOverride("max_transactions_behind", default=100),
+                    TemplateStepOverride("comment", default="auto-configured"),
+                ],
+                extra_fields=[
+                    WizardField("mode_info", "Mode Information", "text",
+                                default="",
+                                help_text="Select a mode above to see the description"),
+                ],
+            ),
+        ],
+        mode_steps={
+            "mgr_single_primary": [],
+            "mgr_multi_primary": [],
+            "replication": [],
+            "galera": [],
+        },
+    ),
 }
 
 

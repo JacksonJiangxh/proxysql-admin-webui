@@ -23,7 +23,7 @@ from app.services.wizards.monitor import (
     QueryErrorAnalysisWizard, ConnectionPoolMonitorWizard,
     RealtimeProcessListWizard, UserConnectionStatsWizard,
     BackendTopologyWizard, GlobalStatusWizard, GtidSyncStatusWizard,
-    ClusterStatusWizard,
+    ClusterStatusWizard, MonitorCheckModeWizard,
 )
 from app.services.wizards.ops import (
     ConfigBackupWizard, ConfigRestoreWizard, FlushQueryCacheWizard,
@@ -61,7 +61,7 @@ __all__ = [
     "QueryErrorAnalysisWizard", "ConnectionPoolMonitorWizard",
     "RealtimeProcessListWizard", "UserConnectionStatsWizard",
     "BackendTopologyWizard", "GlobalStatusWizard", "GtidSyncStatusWizard",
-    "ClusterStatusWizard",
+    "ClusterStatusWizard", "MonitorCheckModeWizard",
     # Operations
     "ConfigBackupWizard", "ConfigRestoreWizard", "FlushQueryCacheWizard",
     # System

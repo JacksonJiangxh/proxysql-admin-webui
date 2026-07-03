@@ -1,4 +1,6 @@
 """Wizard mode API endpoints."""
+import logging
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
@@ -9,6 +11,7 @@ from app.services.proxysql import proxysql_service
 from app.utils.db_helpers import get_proxysql_credentials
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ── Helper: serialize a field definition for the frontend ──────
@@ -193,28 +196,50 @@ async def execute_wizard(
         auto_save=options.get("auto_save", False),
     )
 
-    # Store in wizard history
+    # Store in wizard history (non-critical — do not fail the request if it errors)
     from app.database import get_db
     import json
-    db = await get_db()
     try:
-        await db.execute(
-            """INSERT INTO wizard_history
-               (user_id, server_id, wizard_id, wizard_name, category,
-                submitted_fields, executed_sql, auto_apply, auto_save, success, error_message)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user["id"], data.server_id, data.wizard_id, wizard.definition.name,
-             wizard.definition.category,
-             json.dumps(data.fields),
-             json.dumps(result.get("executed_sql", [])),
-             1 if options.get("auto_apply") else 0,
-             1 if options.get("auto_save") else 0,
-             1 if result.get("ok") else 0,
-             result.get("errors", [None])[0] if result.get("errors") else None)
-        )
-        await db.commit()
-    finally:
-        await db.close()
+        db = await get_db()
+        try:
+            # Verify that the referenced user and server actually exist before
+            # attempting the INSERT.  SQLite's foreign-key enforcement is
+            # connection-scoped (PRAGMA foreign_keys), so a stale or
+            # recycled connection might miss the PRAGMA.  Explicit existence
+            # checks give us a clearer error message than a raw
+            # "FOREIGN KEY constraint failed".
+            user_cursor = await db.execute("SELECT id FROM users WHERE id = ?", (user["id"],))
+            if not await user_cursor.fetchone():
+                logger.warning("wizard_history: user_id=%s not found in users table", user["id"])
+            else:
+                server_cursor = await db.execute(
+                    "SELECT id FROM server_configs WHERE id = ?", (data.server_id,)
+                )
+                if not await server_cursor.fetchone():
+                    logger.warning(
+                        "wizard_history: server_id=%s not found in server_configs table",
+                        data.server_id,
+                    )
+                else:
+                    await db.execute(
+                        """INSERT INTO wizard_history
+                           (user_id, server_id, wizard_id, wizard_name, category,
+                            submitted_fields, executed_sql, auto_apply, auto_save, success, error_message)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (user["id"], data.server_id, data.wizard_id, wizard.definition.name,
+                         wizard.definition.category,
+                         json.dumps(data.fields),
+                         json.dumps(result.get("executed_sql", [])),
+                         1 if options.get("auto_apply") else 0,
+                         1 if options.get("auto_save") else 0,
+                         1 if result.get("ok") else 0,
+                         result.get("errors", [None])[0] if result.get("errors") else None)
+                    )
+                    await db.commit()
+        finally:
+            await db.close()
+    except Exception as exc:
+        logger.warning("Failed to persist wizard_history: %s", exc)
 
     return result
 
@@ -227,16 +252,20 @@ async def get_wizard_history(
 ):
     """Get wizard execution history."""
     from app.database import get_db
-    db = await get_db()
     try:
-        cursor = await db.execute(
-            """SELECT id, wizard_id, wizard_name, category, success, auto_apply, auto_save, created_at
-               FROM wizard_history
-               WHERE user_id = ? AND server_id = ?
-               ORDER BY created_at DESC LIMIT ?""",
-            (user["id"], server_id, limit)
-        )
-        rows = await cursor.fetchall()
-        return {"history": [dict(r) for r in rows]}
-    finally:
-        await db.close()
+        db = await get_db()
+        try:
+            cursor = await db.execute(
+                """SELECT id, wizard_id, wizard_name, category, success, auto_apply, auto_save, created_at
+                   FROM wizard_history
+                   WHERE user_id = ? AND server_id = ?
+                   ORDER BY created_at DESC LIMIT ?""",
+                (user["id"], server_id, limit)
+            )
+            rows = await cursor.fetchall()
+            return {"history": [dict(r) for r in rows]}
+        finally:
+            await db.close()
+    except Exception as exc:
+        logger.warning("Failed to read wizard_history: %s", exc)
+        return {"history": []}
