@@ -82,15 +82,35 @@ class Settings:
 
     # Encryption key for stored credentials (must be set via environment variable)
     FERNET_KEY: str = os.getenv("FERNET_KEY", "")
-    if not FERNET_KEY:
+
+    # Validate the key early so the app fails with a clear message at startup
+    # rather than crashing deep inside a module import.
+    _fernet_valid = False
+    if FERNET_KEY:
+        try:
+            from cryptography.fernet import Fernet as _Fernet  # noqa: N813
+            _Fernet(FERNET_KEY.encode() if isinstance(FERNET_KEY, str) else FERNET_KEY)
+            _fernet_valid = True
+        except Exception:
+            pass
+
+    if not _fernet_valid:
         from cryptography.fernet import Fernet
-        FERNET_KEY = Fernet.generate_key().decode()
         import warnings
-        warnings.warn(
-            "FERNET_KEY not set. Auto-generated a temporary key. "
-            "Set FERNET_KEY environment variable for production use.",
-            RuntimeWarning,
-        )
+        if FERNET_KEY:
+            warnings.warn(
+                f"FERNET_KEY is invalid ({FERNET_KEY[:20]}...). "
+                "Auto-generating a temporary key. "
+                "Set a valid FERNET_KEY environment variable for production use.",
+                RuntimeWarning,
+            )
+        else:
+            warnings.warn(
+                "FERNET_KEY not set. Auto-generated a temporary key. "
+                "Set FERNET_KEY environment variable for production use.",
+                RuntimeWarning,
+            )
+        FERNET_KEY = Fernet.generate_key().decode()
 
     # ── Rate Limiting Settings ────────────────────────────────
     # Set RATE_LIMIT_ENABLED=false to temporarily disable rate limiting
