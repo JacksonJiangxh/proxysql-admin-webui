@@ -1,16 +1,20 @@
 """CSRF protection middleware using Double Submit Cookie pattern.
 
 This implementation follows the OWASP recommendations for CSRF protection:
-1. Strict origin validation
+1. Strict origin validation (configurable trusted origins for reverse-proxy setups)
 2. Double Submit Cookie pattern with synchronized tokens
 3. Custom header check (most secure, no token leakage)
+
+When deployed behind a reverse proxy, set TRUSTED_ORIGINS to the external
+domain(s) users will access from (e.g. "https://proxysql.example.com").
 """
 import secrets
 import hashlib
 import os
-from fastapi import Request, HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from urllib.parse import urlparse
+
+from fastapi import Request
+from starlette.responses import Response, JSONResponse
 
 
 # Paths exempt from CSRF protection (public endpoints)
@@ -23,9 +27,27 @@ CSRF_EXEMPT_PATHS = {
     "/ws/",
 }
 
+# Trusted external origins — set via TRUSTED_ORIGINS env var (comma-separated).
+# Required when the app sits behind a reverse proxy where the Host header
+# seen by the backend differs from the Origin header sent by the browser.
+# Example: TRUSTED_ORIGINS=https://proxysql.example.com,https://other.example.com
+_TRUSTED_ORIGINS = {
+    o.strip()
+    for o in os.getenv("TRUSTED_ORIGINS", "").split(",")
+    if o.strip()
+}
 
-class CSRFMiddleware(BaseHTTPMiddleware):
+# Whether to skip origin validation entirely (e.g. for internal/trusted networks).
+# Default: false. Set CSRF_SKIP_ORIGIN_CHECK=true if your proxy strips Origin/Referer.
+_SKIP_ORIGIN_CHECK = os.getenv("CSRF_SKIP_ORIGIN_CHECK", "false").lower() in ("1", "true", "yes")
+
+
+class CSRFMiddleware:
     """CSRF protection middleware using Double Submit Cookie pattern.
+
+    Implemented as pure ASGI middleware (not BaseHTTPMiddleware) to avoid the
+    Starlette BaseHTTPMiddleware bug where HTTPException inside a TaskGroup
+    gets swallowed and converted to 500.
 
     For state-changing requests (POST, PUT, PATCH, DELETE), this middleware:
     1. Validates the Origin/Referer header (same-origin policy)
@@ -48,32 +70,64 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
     COOKIE_SAMESITE = "lax"  # or "strict" for maximum protection
 
-    async def dispatch(self, request: Request, call_next):
-        """Process request with CSRF validation for state-changing operations."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
         path = request.url.path.rstrip("/")
 
         # Skip exempt paths
         if any(path.startswith(p) for p in CSRF_EXEMPT_PATHS):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         # Only validate state-changing methods
         if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
-            response = await call_next(request)
-            # Set CSRF token cookie for GET requests
-            response = await self._set_csrf_cookie(request, response)
-            return response
+            # For safe methods, pass through and attach CSRF cookie on response
+            await self._wrap_with_csrf_cookie(scope, receive, send)
+            return
 
-        # Validate CSRF token
+        # Validate CSRF token for state-changing requests
         if not await self._validate_csrf(request):
-            raise HTTPException(
+            response = JSONResponse(
                 status_code=403,
-                detail="CSRF validation failed. Ensure you're using the app from the legitimate origin and include the X-CSRF-Token header."
+                content={
+                    "detail": "CSRF validation failed. Ensure you're using the app "
+                              "from the legitimate origin and include the X-CSRF-Token header."
+                },
             )
+            await response(scope, receive, send)
+            return
 
-        response = await call_next(request)
-        # Rotate CSRF token after successful state-changing request
-        response = await self._set_csrf_cookie(request, response)
-        return response
+        # Pass through and rotate CSRF cookie
+        await self._wrap_with_csrf_cookie(scope, receive, send)
+
+    async def _wrap_with_csrf_cookie(self, scope, receive, send):
+        """Call the inner app and append a CSRF cookie to the response."""
+
+        async def _send(message):
+            if message["type"] == "http.response.start":
+                token = secrets.token_hex(32)
+                cookie_value = (
+                    f"{self.CSRF_COOKIE}={token}; "
+                    f"Path=/; "
+                    f"Max-Age={3600 * 24}; "
+                    f"SameSite={self.COOKIE_SAMESITE}"
+                )
+                if self.COOKIE_SECURE:
+                    cookie_value += "; Secure"
+                # Append as an additional set-cookie header (don't overwrite existing ones)
+                headers = list(message.get("headers", []))
+                headers.append((b"set-cookie", cookie_value.encode("latin-1")))
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, _send)
 
     async def _validate_csrf(self, request: Request) -> bool:
         """Validate the CSRF token using Double Submit Cookie pattern.
@@ -87,12 +141,12 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         cross-origin scripts).
         """
         # 1. Check Origin/Referer for same-origin policy
-        origin = request.headers.get("origin") or request.headers.get("referer")
-        if origin:
-            # Validate origin is from our domain
-            host = request.headers.get("host", "").split(":")[0]
-            if host and not self._is_same_origin(request, origin, host):
-                return False
+        if not _SKIP_ORIGIN_CHECK:
+            origin = request.headers.get("origin") or request.headers.get("referer")
+            if origin:
+                host = request.headers.get("host", "").split(":")[0]
+                if host and not self._is_same_origin(request, origin, host):
+                    return False
 
         # 2. Check for CSRF token header
         token_header = request.headers.get(self.CSRF_HEADER)
@@ -107,46 +161,35 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         # 4. Validate tokens match (constant-time comparison)
         return secrets.compare_digest(token_header, token_cookie)
 
-    async def _set_csrf_cookie(self, request: Request, response: Response) -> Response:
-        """Generate and set a new CSRF token cookie.
-
-        Token is generated using secrets.token_hex() for cryptographic security.
-        """
-        # Generate new token
-        token = secrets.token_hex(32)
-
-        # Set cookie with security attributes
-        response.set_cookie(
-            key=self.CSRF_COOKIE,
-            value=token,
-            httponly=False,  # Must be readable by JavaScript for custom header approach
-            secure=self.COOKIE_SECURE,
-            samesite=self.COOKIE_SAMESITE,
-            max_age=3600 * 24,  # 24 hours
-            path="/",
-        )
-
-        return response
-
     def _is_same_origin(self, request: Request, origin: str, host: str) -> bool:
-        """Check if the origin is the same as the host."""
+        """Check if the origin matches either the request host or a trusted origin.
+
+        When deployed behind a reverse proxy, the Host header may be the
+        internal backend address (e.g. "proxysql-webui:8080"), while the
+        Origin header is the external user-facing domain. Set TRUSTED_ORIGINS
+        to allow these external origins through CSRF checks.
+        """
+        # First check: is origin in the trusted origins list?
+        if _TRUSTED_ORIGINS:
+            origin_normalized = origin.rstrip("/")
+            if origin_normalized in _TRUSTED_ORIGINS:
+                return True
+
+        # Second check: strict same-origin via Host header
         try:
-            # Parse origin (format: https://example.com:8080)
-            from urllib.parse import urlparse
             parsed = urlparse(origin)
 
-            # Check scheme and host match
             origin_host = parsed.hostname
             origin_port = parsed.port
-
-            # Normalize port (default 443 for https, 80 for http)
             if origin_port is None:
                 origin_port = 443 if parsed.scheme == "https" else 80
 
-            # Get request host and port
-            request_port = request.headers.get("host", "").split(":")
-            request_host = request_port[0]
-            request_port = int(request_port[1]) if len(request_port) > 1 else (443 if request.url.scheme == "https" else 80)
+            request_port_parts = request.headers.get("host", "").split(":")
+            request_host = request_port_parts[0]
+            request_port = (
+                int(request_port_parts[1]) if len(request_port_parts) > 1
+                else (443 if request.url.scheme == "https" else 80)
+            )
 
             return (
                 origin_host == request_host
@@ -154,7 +197,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 and parsed.scheme == request.url.scheme
             )
         except Exception:
-            # If parsing fails, be permissive (other checks will fail later if there's an issue)
+            # If parsing fails, be permissive
             return True
 
 

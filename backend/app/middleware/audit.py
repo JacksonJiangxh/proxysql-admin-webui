@@ -1,9 +1,12 @@
-"""Audit logging middleware - records all API operations to audit_logs table."""
+"""Audit logging middleware - records all API operations to audit_logs table.
+
+Implemented as pure ASGI middleware (not BaseHTTPMiddleware) to avoid the
+Starlette BaseHTTPMiddleware bug where HTTPException inside a TaskGroup
+gets swallowed and converted to 500.
+"""
 import json
 import uuid
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
 
 from app.database import get_db
 
@@ -19,18 +22,25 @@ AUDIT_EXEMPT_PATHS = {
 }
 
 
-class AuditMiddleware(BaseHTTPMiddleware):
+class AuditMiddleware:
     """Middleware that logs all mutating API operations to the audit_logs table."""
 
-    async def dispatch(self, request: Request, call_next):
-        """Process request and log audit trail for state-changing operations."""
-        # Only audit mutating methods or specific read endpoints
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
         method = request.method
         path = request.url.path.rstrip("/")
 
         # Skip exempt paths
         if any(path.startswith(p) for p in AUDIT_EXEMPT_PATHS):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         # Determine if this is a state-changing operation
         is_write = method in ("POST", "PUT", "PATCH", "DELETE")
@@ -40,7 +50,8 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         # Skip routine read operations
         if is_read:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         # Extract user info if available (set by auth middleware)
         user_id = getattr(request.state, "user_id", None)
@@ -55,14 +66,21 @@ class AuditMiddleware(BaseHTTPMiddleware):
         # Store request_id in state for access by route handlers
         request.state.request_id = request_id
 
-        # Process the request
-        response = await call_next(request)
-
         # Determine the action from HTTP method and path
         action = self._determine_action(method, path)
         resource = self._determine_resource(path)
 
-        # Log to database
+        # Capture response status code via send wrapper
+        status_code = [200]  # mutable container
+
+        async def _send(message):
+            if message["type"] == "http.response.start":
+                status_code[0] = message.get("status", 200)
+            await send(message)
+
+        await self.app(scope, receive, _send)
+
+        # Log to database (fire-and-forget, never break the app)
         try:
             db = await get_db()
             try:
@@ -79,7 +97,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                         json.dumps({
                             "method": method,
                             "path": path,
-                            "status_code": response.status_code,
+                            "status_code": status_code[0],
                             "request_id": request_id,
                         }),
                         client_ip,
@@ -92,21 +110,16 @@ class AuditMiddleware(BaseHTTPMiddleware):
             # Audit logging should never break the application
             pass
 
-        return response
-
     def _get_client_ip(self, request: Request) -> str:
         """Extract real client IP, considering proxies."""
-        # Check X-Forwarded-For header first (for reverse proxy setups)
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             return forwarded.split(",")[0].strip()
 
-        # Check X-Real-IP header
         real_ip = request.headers.get("x-real-ip")
         if real_ip:
             return real_ip
 
-        # Fall back to direct client IP
         if request.client:
             return request.client.host
         return "unknown"
@@ -123,11 +136,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
     def _determine_resource(self, path: str) -> str:
         """Extract resource name from API path."""
-        # Strip api prefix and extract resource
         parts = path.split("/")
-        # /api/v1/users -> users
-        # /api/v1/servers/test -> servers
-        # /api/v1/wizards/execute -> wizards
         for i, part in enumerate(parts):
             if part in ("api", "v1"):
                 continue

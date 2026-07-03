@@ -6,12 +6,15 @@ Exposes standard HTTP metrics for monitoring via Prometheus/Grafana:
 - http_requests_in_flight: Gauge of currently active requests
 
 The /metrics endpoint returns text/plain Prometheus exposition format.
+
+Implemented as pure ASGI middleware (not BaseHTTPMiddleware) to avoid the
+Starlette BaseHTTPMiddleware bug where HTTPException inside a TaskGroup
+gets swallowed and converted to 500.
 """
 
 import time
 import re
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 # ── Metric definitions ──────────────────────────────────────────
@@ -52,7 +55,7 @@ def _normalize_path(path: str) -> str:
     return _PATH_NORMALIZE_RE.sub("/:id", path)
 
 
-class MetricsMiddleware(BaseHTTPMiddleware):
+class MetricsMiddleware:
     """Records HTTP request count, latency, and in-flight gauge.
 
     Should be placed early in the middleware stack (after GZip, before
@@ -62,31 +65,45 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
     EXEMPT_PREFIXES = ("/metrics", "/api/v1/metrics", "/health")
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
         path = request.url.path
         if any(path.startswith(p) for p in self.EXEMPT_PREFIXES):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         method = request.method
         HTTP_REQUESTS_IN_FLIGHT.labels(method=method).inc()
         start = time.time()
 
+        # Track response status via send wrapper
+        status_code = ["500"]  # default if exception occurs
+
+        async def _send(message):
+            if message["type"] == "http.response.start":
+                status_code[0] = str(message.get("status", 200))
+            await send(message)
+
         try:
-            response = await call_next(request)
-            status = str(response.status_code)
+            await self.app(scope, receive, _send)
         except Exception:
-            status = "500"
+            status_code[0] = "500"
             raise
         finally:
             HTTP_REQUESTS_IN_FLIGHT.labels(method=method).dec()
 
         normalized = _normalize_path(path)
-        HTTP_REQUESTS_TOTAL.labels(method=method, path=normalized, status=status).inc()
+        HTTP_REQUESTS_TOTAL.labels(method=method, path=normalized, status=status_code[0]).inc()
         HTTP_REQUEST_DURATION_SECONDS.labels(method=method, path=normalized).observe(
             time.time() - start
         )
-
-        return response
 
 
 async def metrics_endpoint() -> Response:

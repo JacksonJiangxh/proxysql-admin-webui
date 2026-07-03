@@ -8,13 +8,16 @@ Response headers (RFC 6585 / draft‑rate‑limit‑headers):
   - ``X-RateLimit-Limit``     : max requests per window
   - ``X-RateLimit-Remaining``  : requests remaining in current window
   - ``X-RateLimit-Reset``      : seconds until the window resets
+
+Implemented as pure ASGI middleware (not BaseHTTPMiddleware) to avoid the
+Starlette BaseHTTPMiddleware bug where HTTPException inside a TaskGroup
+gets swallowed and converted to 500.
 """
 import time
 from collections import defaultdict, deque
 from typing import Optional
-from fastapi import Request, HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from fastapi import Request
+from starlette.responses import JSONResponse
 
 from app.config import settings
 
@@ -71,16 +74,11 @@ class SimpleRateLimiter:
         return False, headers
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Global + per-endpoint rate limiter.
+class RateLimitMiddleware:
+    """Global + per-endpoint rate limiter (pure ASGI middleware).
 
     Middleware is **disabled** when ``settings.RATE_LIMIT_ENABLED`` is
     ``False`` — useful for internal deployments or debugging.
-
-    Ordering in the middleware stack (see ``main.py``):
-      ...  ← CSRFMiddleware
-      ← RateLimitMiddleware   ← HERE
-      ...  ← (next middleware)
     """
 
     # Paths that are never rate-limited (health-check, docs, etc.)
@@ -92,7 +90,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     }
 
     def __init__(self, app):
-        super().__init__(app)
+        self.app = app
         # Global limiter — values from settings (env-overridable)
         self.global_limiter = SimpleRateLimiter(
             max_requests=settings.RATE_LIMIT_GLOBAL_MAX,
@@ -104,7 +102,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _build_endpoint_limits(self) -> None:
         """Build the endpoint limit map from settings or defaults."""
-        # Start with defaults, then allow env-based overrides in the future
         self.endpoint_limits: dict[str, tuple[int, int]] = dict(_DEFAULT_ENDPOINT_LIMITS)
 
     def _get_endpoint_limiter(self, max_req: int, window: int) -> SimpleRateLimiter:
@@ -116,27 +113,35 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
         return self._endpoint_limiters[key]
 
-    async def dispatch(self, request: Request, call_next):
-        """Apply global + per-endpoint rate limits."""
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         # Skip entirely when rate-limiting is disabled
         if not settings.RATE_LIMIT_ENABLED:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
+        request = Request(scope, receive)
         path = request.url.path.rstrip("/")
 
         # Exempt paths (health-check, docs, WebSockets)
         if any(path.startswith(p.rstrip("/")) for p in self.EXEMPT_PATHS):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         # ── 1. Global rate limit (IP-based) ───────────────────────
         ip_key = self._client_key(request)
         allowed, headers = self.global_limiter.is_allowed(ip_key)
         if not allowed:
-            raise HTTPException(
+            response = JSONResponse(
                 status_code=429,
-                detail="Global rate limit exceeded. Please retry later.",
+                content={"detail": "Global rate limit exceeded. Please retry later."},
                 headers=headers,
             )
+            await response(scope, receive, send)
+            return
 
         # ── 2. Per-endpoint stricter limits ─────────────────────────
         for prefix, (max_req, window) in self.endpoint_limits.items():
@@ -144,15 +149,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 ep_limiter = self._get_endpoint_limiter(max_req, window)
                 ep_allowed, ep_headers = ep_limiter.is_allowed(ip_key)
                 if not ep_allowed:
-                    raise HTTPException(
+                    response = JSONResponse(
                         status_code=429,
-                        detail=(
-                            f"Rate limit exceeded for this endpoint "
-                            f"({max_req} requests per {window}s). "
-                            f"Please retry in {ep_headers.get('Retry-After', '?')}s."
-                        ),
+                        content={
+                            "detail": (
+                                f"Rate limit exceeded for this endpoint "
+                                f"({max_req} requests per {window}s). "
+                                f"Please retry in {ep_headers.get('Retry-After', '?')}s."
+                            )
+                        },
                         headers=ep_headers,
                     )
+                    await response(scope, receive, send)
+                    return
                 break
 
         # ── 3. User-based rate limiting (authenticated requests) ───
@@ -161,17 +170,30 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             user_key = f"user:{user_id}"
             user_allowed, _ = self.global_limiter.is_allowed(user_key)
             if not user_allowed:
-                raise HTTPException(
+                response = JSONResponse(
                     status_code=429,
-                    detail="User rate limit exceeded. Please retry later.",
+                    content={"detail": "User rate limit exceeded. Please retry later."},
                 )
+                await response(scope, receive, send)
+                return
 
-        response: Response = await call_next(request)
+        # Pass through and attach rate-limit headers to response
+        await self._wrap_with_headers(scope, receive, send, headers)
 
-        # Attach rate-limit headers to the response
-        for h, v in headers.items():
-            response.headers[h] = v
-        return response
+    async def _wrap_with_headers(self, scope, receive, send, extra_headers: dict[str, str]):
+        """Call the inner app and append rate-limit headers to the response."""
+
+        async def _send(message):
+            if message["type"] == "http.response.start":
+                headers_list = list(message.get("headers", []))
+                for h, v in extra_headers.items():
+                    headers_list.append(
+                        (h.encode("latin-1"), v.encode("latin-1"))
+                    )
+                message["headers"] = headers_list
+            await send(message)
+
+        await self.app(scope, receive, _send)
 
     @staticmethod
     def _client_key(request: Request) -> str:
@@ -204,6 +226,7 @@ class LoginRateLimiter:
         key = RateLimitMiddleware._client_key(request)
         allowed, headers = _login_limiter.is_allowed(key)
         if not allowed:
+            from fastapi import HTTPException
             raise HTTPException(
                 status_code=429,
                 detail="Too many login attempts. Please wait before retrying.",

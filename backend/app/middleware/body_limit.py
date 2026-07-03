@@ -4,12 +4,15 @@ Rejects requests with Content-Length exceeding a configurable maximum
 to prevent memory exhaustion / DoS attacks via oversized payloads.
 
 Configuration:
-    MAX_REQUEST_BODY_SIZE — max body size in megabytes (default: 10 MB)
+    MAX_REQUEST_BODY_SIZE — max body size in bytes (default: 10 MB)
+
+Implemented as pure ASGI middleware (not BaseHTTPMiddleware) to avoid the
+Starlette BaseHTTPMiddleware bug where HTTPException inside a TaskGroup
+gets swallowed and converted to 500.
 """
 
 import logging
 
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -23,7 +26,7 @@ _EXCLUDED_PREFIXES = (
 )
 
 
-class BodyLimitMiddleware(BaseHTTPMiddleware):
+class BodyLimitMiddleware:
     """Rejects requests whose Content-Length exceeds MAX_REQUEST_BODY_SIZE.
 
     Placed AFTER CORS and BEFORE CSRF so that preflight requests and
@@ -31,18 +34,28 @@ class BodyLimitMiddleware(BaseHTTPMiddleware):
     GET/DELETE/OPTIONS are always allowed.
     """
 
-    async def dispatch(self, request: Request, call_next):
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
+
         # Only check state-changing methods — GET/HEAD/OPTIONS/DELETE
-        # (DELETE rarely has a body)
         if request.method not in ("POST", "PUT", "PATCH"):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         # Skip excluded paths
         for prefix in _EXCLUDED_PREFIXES:
             if request.url.path.startswith(prefix):
-                return await call_next(request)
+                await self.app(scope, receive, send)
+                return
 
-        max_bytes = settings.MAX_REQUEST_BODY_SIZE  # already in bytes
+        max_bytes = settings.MAX_REQUEST_BODY_SIZE
         content_length = request.headers.get("content-length")
 
         if content_length is not None:
@@ -54,10 +67,12 @@ class BodyLimitMiddleware(BaseHTTPMiddleware):
                     request.client.host if request.client else "unknown",
                     content_length,
                 )
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=400,
                     content={"detail": "Invalid Content-Length header"},
                 )
+                await response(scope, receive, send)
+                return
 
             if size > max_bytes:
                 logger.warning(
@@ -66,7 +81,7 @@ class BodyLimitMiddleware(BaseHTTPMiddleware):
                     size,
                     max_bytes,
                 )
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=413,
                     content={
                         "detail": (
@@ -75,10 +90,7 @@ class BodyLimitMiddleware(BaseHTTPMiddleware):
                         )
                     },
                 )
+                await response(scope, receive, send)
+                return
 
-        # Note: if Content-Length is missing, the request will naturally
-        # fail at the application level if the body is too large. The
-        # uvicorn layer also enforces its own limit via --limit-max-requests,
-        # but that's a connection-level timeout, not a size limit.
-
-        return await call_next(request)
+        await self.app(scope, receive, send)

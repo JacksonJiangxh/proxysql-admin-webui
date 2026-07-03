@@ -274,8 +274,10 @@ async def sync_cluster_config(cluster_id: str, data: ClusterSyncRequest, user=De
     """
     db = await get_db()
     try:
-        # Determine source: use master if available, otherwise first member
-        if not data.target_servers or len(data.target_servers) > 0:
+        # Determine source: use target_servers if provided, otherwise master
+        if data.target_servers and len(data.target_servers) > 0:
+            source_id = data.target_servers[0]
+        else:
             cursor = await db.execute(
                 "SELECT server_id FROM cluster_members WHERE cluster_id = ? AND role = 'master'",
                 (cluster_id,),
@@ -284,15 +286,6 @@ async def sync_cluster_config(cluster_id: str, data: ClusterSyncRequest, user=De
             if not master_row:
                 raise HTTPException(status_code=400, detail="No master node configured for this cluster")
             source_id = master_row["server_id"]
-        else:
-            cursor = await db.execute(
-                "SELECT server_id FROM cluster_members WHERE cluster_id = ? LIMIT 1",
-                (cluster_id,),
-            )
-            row = await cursor.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="Cluster has no members")
-            source_id = row["server_id"]
 
         # Log the sync operation
         username = user.username if hasattr(user, "username") else "unknown"
