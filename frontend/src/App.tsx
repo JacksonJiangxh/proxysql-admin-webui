@@ -30,6 +30,7 @@ const SettingsPage = lazy(() => import(/* webpackChunkName: "page-SettingsPage" 
 const ClustersPage = lazy(() => import(/* webpackChunkName: "page-ClustersPage" */ './pages/ClustersPage'))
 const ClusterDetailPage = lazy(() => import(/* webpackChunkName: "page-ClusterDetailPage" */ './pages/ClusterDetailPage'))
 const BackupPage = lazy(() => import(/* webpackChunkName: "page-BackupPage" */ './pages/BackupPage'))
+const DatabaseManagerPage = lazy(() => import(/* webpackChunkName: "page-DatabaseManagerPage" */ './pages/DatabaseManagerPage'))
 // MainLayout is eager-loaded because it's needed immediately after login
 import MainLayout from './components/layout/MainLayout'
 
@@ -139,6 +140,11 @@ export default function App() {
         <Route path="settings" element={
           <Suspense fallback={<PageSkeleton />}>
             <SettingsPage />
+          </Suspense>
+        } />
+        <Route path="database" element={
+          <Suspense fallback={<PageSkeleton />}>
+            <DatabaseManagerPage />
           </Suspense>
         } />
       </Route>

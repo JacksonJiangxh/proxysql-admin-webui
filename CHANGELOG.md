@@ -17,15 +17,14 @@
 
 #### 仪表盘与监控
 
-- 实时仪表盘：连接数、QPS、连接池状态、数据延迟等核心指标
+- 实时仪表盘：连接数、QPS、连接池状态等核心指标
 - WebSocket 实时推送：无需手动刷新，数据自动更新
-- 后端服务器拓扑可视化：直观展示主从、Galera、Group Replication 拓扑关系
-- 暗色主题：支持亮色/暗色模式切换，持久化偏好
+- 暗色主题：支持亮色/暗色模式切换，偏好持久化
 
 #### 配置向导（63 个向导，W01-W63）
 
 - **后端服务器管理 (W01-W08)**：添加/编辑/批量导入 MySQL/PgSQL 后端、SSL 配置、连接测试
-- **后端用户管理 (W09-W15)**：创建/编辑/管理后端用户、前后端分离
+- **后端用户管理 (W09-W15)**：创建/编辑/管理 ProxySQL 用户、前后端角色分离
 - **查询路由规则 (W16-W23)**：读写分离、缓存/重写/镜像规则、限流、日志规则
 - **复制与集群拓扑 (W24-W28)**：主从、Group Replication、Galera、Aurora、PgSQL 复制
 - **系统配置 (W29-W42)**：连接池参数、查询处理、Admin 用户、集群节点/同步
@@ -33,25 +32,52 @@
 - **运维与配置同步 (W46-W52)**：Apply All、Save All、配置备份/恢复、磁盘加载
 - **监控与诊断 (W53-W63)**：查询分析、命令/规则统计、连接池/进程面板、集群状态
 
+#### 快速部署模板
+
+- 一键配置完整的 ProxySQL + MySQL 代理架构
+- 支持 5 种架构模式：单主从复制、多主多从复制、MGR 单主、MGR 多主、Galera 集群
+- 多步骤引导流程，全局配置自动继承
+- 预填推荐值，降低配置门槛
+
 #### 表浏览器
 
-- 浏览和编辑全部 ProxySQL 配置表（20+ 张表）
+- 浏览和编辑全部 ProxySQL 配置表
+- 按层级分类（Disk / Memory / Runtime / Stats / Monitor / Other）
 - 分页、搜索、排序、内联编辑功能
-- 表结构信息展示
+- 表结构信息展示和通俗易懂的说明
+- CSV / JSON 数据导出
 
 #### SQL 查询控制台
 
 - 多目标执行：Admin / MySQL / PostgreSQL 三种查询目标
-- 查询历史记录持久化
+- 查询历史记录持久化：搜索、过滤（按日期范围）、分页加载
+- 历史记录管理：删除单条、清除全部、重新执行
 - SQL 语法高亮
-- 结果导出（CSV/JSON）
+- 结果导出（CSV / JSON）
+
+#### 数据库管理
+
+- 直接浏览和管理 ProxySQL 管控的后端 MySQL 数据库
+- 连接凭据自动从 ProxySQL 的 `mysql_servers` 和 `mysql_users` 表获取
+- 使用业务用户凭据连接后端（而非监控用户），确保足够的操作权限
+- 浏览数据库列表和数据表
+- 查看表结构（Schema）
+- 执行 SQL 查询（SELECT / DDL / DML）
+- 分页浏览表数据
+- 用户选择器：支持切换不同业务用户连接后端
 
 #### 配置同步
 
 - DISK ↔ MEMORY ↔ RUNTIME 三层配置管理
-- 按模块同步（全局变量、查询规则、MySQL 服务器等）
-- 配置差异对比：Disk/Memory/Runtime 三层差异可视化，行级对比
+- 按模块同步（Servers、Users、Query Rules、Variables）
+- 配置差异对比：Memory / Runtime 层差异可视化，行级对比
 - 安全的原子写入
+
+#### 配置备份
+
+- 创建、管理、恢复 ProxySQL 配置快照备份
+- 备份记录管理：查看历史、下载、删除
+- 恢复操作：从备份恢复到 Memory 层
 
 #### 多实例管理
 
@@ -75,16 +101,16 @@
 - bcrypt 密码哈希
 - Fernet 加密存储 ProxySQL 凭证
 - CSRF 双提交 Cookie 防护
-- SQL 注入防护策略
-- 登录暴力破解防护
 - 审计日志：记录所有配置变更操作
 
-#### 国际化 (i18n)
+#### 用户体验
 
-- 默认语言：简体中文
-- 内置英文翻译
-- 支持扩展更多语言
-- 语言偏好持久化到 localStorage
+- **国际化 (i18n)**：默认简体中文 + 内置英文，语言偏好持久化
+- **全局搜索**：Ctrl+K / ⌘K 快捷键，搜索页面、配置向导和常用功能
+- **新手引导 Tour**：交互式步骤导览，覆盖侧边栏、服务器选择器、主题语言、仪表盘、配置向导、全局搜索
+- **错误边界**：React Error Boundary 捕获运行时错误，提供重新加载和返回首页
+- **Toast 通知**：操作成功/失败/警告/提示的非阻塞通知
+- **加载骨架屏**：页面加载时显示骨架屏，减少布局偏移
 
 #### 部署
 
@@ -95,19 +121,24 @@
 
 #### 文档
 
-- README.md：项目概览、快速开始、功能列表
-- TECHNICAL_DOCUMENTATION.md：完整技术架构、API 规范、数据模型、安全设计
+- README.md：项目概览、快速开始、完整功能列表
 - CONTRIBUTING.md：开发环境设置、编码规范、贡献流程
-- docs/USER_MANUAL.md：面向最终用户的完整操作指南（11 章）
+- CHANGELOG.md：本文件
+- docs/index.md：用户手册首页
+- docs/getting-started.md：5 分钟快速入门指南
+- docs/USER_MANUAL.md：面向最终用户的完整操作指南
 - docs/WIZARD_GUIDE.md：63 个向导详细参考文档
 - docs/DEPLOYMENT.md：生产部署指南（Docker/裸机/K8s）
+- docs/configuration.md：环境变量和配置参数详解
+- docs/troubleshooting.md：故障排除指南
 - SECURITY.md：安全策略和漏洞报告
+- plan.md：测试环境搭建与任务追踪
 
 #### 测试
 
-- 单元测试（13 个测试文件）：auth、api_integration、codegen、helpers、schema、security、services、sync、users、wizards
+- 单元测试：auth、api_integration、codegen、helpers、schema、security、services、sync、users、wizards
 - 集成测试（Docker Compose + ProxySQL Mock 环境）
-- E2E 测试（Playwright，3 个测试文件）
+- E2E 测试（Playwright）
 - 代码检查：ruff (Python) + ESLint (TypeScript)
 
 ### 技术栈

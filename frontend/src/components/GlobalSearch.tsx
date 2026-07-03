@@ -29,6 +29,7 @@ function buildSearchIndex(t: (key: string) => string): SearchItem[] {
     { id: 'page-servers', label: t('nav.servers'), keywords: ['server', '服务器', 'instance', '实例', 'add', '添加', 'manage', '管理'], path: '/servers', category: 'search.page' },
     { id: 'page-clusters', label: t('nav.clusters'), keywords: ['cluster', '集群', 'group', '组', 'node', '节点'], path: '/clusters', category: 'search.page' },
     { id: 'page-backup', label: t('nav.backup'), keywords: ['backup', '备份', 'restore', '恢复', 'snapshot', '快照'], path: '/backup', category: 'search.page' },
+    { id: 'page-database', label: t('nav.database'), keywords: ['database', '数据库', 'mysql', 'table', '表', 'sql', 'data', '数据'], path: '/database', category: 'search.page' },
     { id: 'page-users', label: t('nav.users'), keywords: ['user', '用户', 'role', '角色', 'permission', '权限', 'account', '账号'], path: '/users', category: 'search.page' },
     { id: 'page-settings', label: t('nav.settings'), keywords: ['settings', '设置', 'system', '系统', 'audit', '审计', 'info', '信息'], path: '/settings', category: 'search.page' },
     // ── Wizard categories (W01-W63, added as scannable entries) ──

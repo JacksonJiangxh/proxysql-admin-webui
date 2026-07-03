@@ -214,3 +214,37 @@ export const exportApi = {
       responseType: 'blob',
     }),
 }
+
+// Database Manager API — direct backend MySQL management
+export const dbManagerApi = {
+  listBackends: (serverId: string) =>
+    apiClient.get(`/api/v1/db-manager/${serverId}/backends`),
+  testConnection: (serverId: string, hostname: string, port: number, username: string) =>
+    apiClient.post(`/api/v1/db-manager/${serverId}/test-connection`, null, {
+      params: { hostname, port, username },
+    }),
+  listDatabases: (serverId: string, hostname: string, port: number, username: string) =>
+    apiClient.get(`/api/v1/db-manager/${serverId}/databases`, {
+      params: { hostname, port, username },
+    }),
+  listTables: (serverId: string, hostname: string, port: number, database: string, username: string) =>
+    apiClient.get(`/api/v1/db-manager/${serverId}/tables`, {
+      params: { hostname, port, database, username },
+    }),
+  getTableSchema: (serverId: string, hostname: string, port: number, database: string, table: string, username: string) =>
+    apiClient.get(`/api/v1/db-manager/${serverId}/table-schema`, {
+      params: { hostname, port, database, table, username },
+    }),
+  getTableData: (serverId: string, hostname: string, port: number, database: string, table: string, username: string, page: number = 1, pageSize: number = 50) =>
+    apiClient.get(`/api/v1/db-manager/${serverId}/table-data`, {
+      params: { hostname, port, database, table, username, page, page_size: pageSize },
+    }),
+  executeSQL: (serverId: string, data: {
+    sql: string
+    database?: string
+    hostname: string
+    port: number
+    username: string
+    limit?: number
+  }) => apiClient.post(`/api/v1/db-manager/${serverId}/execute`, data),
+}

@@ -9,7 +9,7 @@ import GlobalSearch from '../GlobalSearch'
 import {
   LayoutDashboard, Wand2, Table, Terminal, RefreshCw,
   Users, Server, LogOut, Menu, X, GitCompare, Settings,
-  Network, Rocket, Archive, Search,
+  Network, Rocket, Archive, Search, Database,
 } from 'lucide-react'
 
 export default function MainLayout() {
@@ -33,6 +33,7 @@ export default function MainLayout() {
     { path: '/servers', label: t('nav.servers'), icon: Server },
     { path: '/clusters', label: t('nav.clusters'), icon: Network },
     { path: '/backup', label: t('nav.backup'), icon: Archive },
+    { path: '/database', label: t('nav.database'), icon: Database },
     { path: '/users', label: t('nav.users'), icon: Users },
     { path: '/settings', label: t('nav.settings'), icon: Settings },
   ], [t])

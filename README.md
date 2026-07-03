@@ -35,6 +35,7 @@
 ```
 浏览器 (React SPA) ──HTTP/WebSocket──▶ FastAPI 单进程 (:8080) ──MySQL 协议──▶ ProxySQL Admin (:6032)
                                            │                                     ──▶ MySQL/PostgreSQL 后端
+                                           │                                     ──▶ 后端 MySQL 数据库（数据库管理）
                                            └─ 同源托管前端静态文件
 ```
 
@@ -90,15 +91,22 @@ make dev-frontend     # 终端2：前端 :5173 → http://localhost:5173
 |------|------|
 | 📊 **仪表盘** | 实时监控连接数、QPS、连接池状态，WebSocket 推送 |
 | 🧙 **配置向导** | 63 个引导式表单（W01-W63），无需手写 SQL |
+| 🚀 **快速部署模板** | 一键配置完整 ProxySQL + MySQL 代理架构，支持 5 种架构模式 |
 | 📋 **表浏览器** | 查看/编辑所有 ProxySQL 配置表，分页、搜索、排序、内联编辑 |
 | 💻 **SQL 控制台** | 专家模式，支持 Admin / MySQL / PostgreSQL 多目标执行 |
+| 🗄️ **数据库管理** | 直接浏览和管理 ProxySQL 管控的后端 MySQL 数据库，支持表浏览、Schema 查看、SQL 执行 |
 | 🔄 **配置同步** | DISK ↔ MEMORY ↔ RUNTIME 三层管理，按模块同步 |
-| 🔍 **配置差异** | Disk / Memory / Runtime 三层差异可视化，行级对比 |
+| 🔍 **配置差异** | Memory / Runtime 层差异可视化，行级对比 |
+| 💾 **配置备份** | 创建、管理、恢复 ProxySQL 配置快照备份，支持下载 |
 | 🖥️ **多实例管理** | 管理多个 ProxySQL 服务器，连接测试，一键切换 |
 | 🌐 **集群管理** | ProxySQL 原生集群组管理，跨节点配置同步，状态监控 |
-| 🔐 **JWT 认证** | 多用户管理，Token 自动刷新 |
+| 🔐 **JWT 认证** | 多用户管理，Token 自动刷新，RBAC 三级权限 |
 | 🌍 **国际化** | 默认中文，内置英文，支持扩展更多语言 |
 | 🎨 **暗色主题** | 亮色/暗色模式切换，偏好持久化 |
+| 🔎 **全局搜索** | Ctrl+K 快捷键搜索页面、向导和功能 |
+| 📝 **查询历史** | SQL 执行历史记录，支持搜索、过滤和导出 |
+| 🎓 **新手引导** | 交互式 Tour 导览，帮助新用户快速上手 |
+| 📤 **数据导出** | 支持 CSV / JSON 格式导出查询结果和表数据 |
 
 ---
 
@@ -107,6 +115,11 @@ make dev-frontend     # 终端2：前端 :5173 → http://localhost:5173
 | 文档 | 链接 | 说明 |
 |------|------|------|
 | 📖 用户手册 | https://jacksonjiangxh.github.io/proxysql-admin-webui/ | 面向最终用户的完整操作指南 |
+| 🧙 配置向导参考 | [WIZARD_GUIDE.md](docs/WIZARD_GUIDE.md) | 63 个向导完整说明和最佳实践 |
+| 🚀 快速入门 | [getting-started.md](docs/getting-started.md) | 5 分钟安装和初始化 |
+| 🏗️ 部署指南 | [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker / 裸机 / Kubernetes 生产部署 |
+| ⚙️ 配置参考 | [configuration.md](docs/configuration.md) | 环境变量和配置参数详解 |
+| 🔧 故障排除 | [troubleshooting.md](docs/troubleshooting.md) | 常见问题及解决方案 |
 | 🤝 贡献指南 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境设置、编码规范、PR 流程 |
 | 📋 变更日志 | [CHANGELOG.md](CHANGELOG.md) | 版本发布历史和变更记录 |
 

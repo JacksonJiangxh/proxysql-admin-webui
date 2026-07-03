@@ -5,9 +5,10 @@
 | 问题 | 可能原因 | 解决方案 |
 |------|---------|---------|
 | 无法连接 ProxySQL | 网络不通或端口错误 | 检查 ProxySQL 是否运行，确认管理端口（默认 6032） |
-| 认证失败 | 用户名或密码错误 | 检查 ProxySQL 管理用户凭证 |
+| 认证失败 | 用户名或密码错误 | 检查 ProxySQL 管理用户凭证。注意：`admin` 用户仅限本地连接，远程需使用其他用户 |
 | 连接超时 | 网络延迟或防火墙 | 检查防火墙规则，确认端口开放 |
 | WebSocket 断开 | 网络不稳定 | 等待自动重连，或刷新页面 |
+| 数据库管理连接失败 | 后端 MySQL 凭据不正确 | 确认 ProxySQL `mysql_users` 表中业务用户密码与后端 MySQL 一致 |
 
 ---
 
@@ -33,6 +34,14 @@ mysql -h 127.0.0.1 -P 6032 -u admin -p
 tail -f /var/lib/proxysql/proxysql.log
 ```
 
+### 4. 检查管理用户配置
+
+```bash
+# 查看当前管理员凭据
+mysql -h 127.0.0.1 -P 6032 -u admin -padmin \
+  -e "SELECT * FROM global_variables WHERE variable_name='admin-admin_credentials';"
+```
+
 ---
 
 ## 配置同步失败
@@ -46,11 +55,22 @@ tail -f /var/lib/proxysql/proxysql.log
 
 ---
 
+## 数据库管理问题
+
+| 问题 | 原因 | 解决方案 |
+|------|------|---------|
+| 后端服务器列表为空 | ProxySQL `mysql_servers` 表无记录 | 使用 W01 向导添加后端 MySQL 服务器 |
+| 无可用业务用户 | ProxySQL `mysql_users` 表中无 `backend=1` 的用户 | 使用 W09 向导创建用户，确保在后端 MySQL 中也存在 |
+| 无法连接后端 MySQL | 用户密码不匹配 | 确认 ProxySQL 和后端 MySQL 中的用户密码一致 |
+| 连接被拒绝 | 后端 MySQL 未授权该用户远程连接 | 在后端 MySQL 中执行 `GRANT` 授权 |
+
+---
+
 ## 日志位置
 
 | 日志类型 | 位置 | 查看方式 |
 |---------|------|---------|
-| 应用日志 | `backend/logs/` | Docker: `docker compose logs` |
+| 应用日志 | 标准输出/标准错误 | Docker: `docker compose logs` |
 | ProxySQL 日志 | `/var/lib/proxysql/proxysql.log` | `tail -f` 查看 |
 | systemd 日志 | journald | `journalctl -u proxysql-admin-webui` |
 

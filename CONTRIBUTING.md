@@ -77,27 +77,35 @@ proxysql-admin-webui/
 │   │   ├── main.py                # FastAPI 入口（同时托管前端静态文件）
 │   │   ├── config.py              # 应用配置管理
 │   │   ├── database.py            # SQLite 持久化
-│   │   ├── api/v1/                # REST API 端点（12 个路由模块）
+│   │   ├── api/v1/                # REST API 端点（16 个路由模块）
 │   │   │   ├── auth.py            # 认证（登录/刷新/登出/修改密码）
 │   │   │   ├── tables.py          # 表管理（CRUD + 分页 + 搜索）
 │   │   │   ├── sync.py            # 配置同步（Apply/Save/Discard/Load）
-│   │   │   ├── query.py           # SQL 查询执行 + 历史
+│   │   │   ├── query.py           # SQL 查询执行 + 历史记录
 │   │   │   ├── dashboard.py       # 监控数据 + WebSocket 推送
 │   │   │   ├── users.py           # 用户管理
 │   │   │   ├── servers.py         # 多实例管理 + 连接测试
-│   │   │   ├── settings.py        # 系统设置
-│   │   │   ├── wizards.py         # 向导模式（预览/执行/历史）
+│   │   │   ├── settings.py        # 系统设置 + 审计日志
+│   │   │   ├── wizards.py         # 向导模式（预览/执行/历史/lookup）
+│   │   │   ├── templates.py       # 快速部署模板
 │   │   │   ├── config_diff.py     # 配置差异对比
-│   │   │   └── clusters.py        # 集群管理
+│   │   │   ├── clusters.py        # 集群管理
+│   │   │   ├── backup.py          # 配置备份/恢复
+│   │   │   ├── export.py          # 数据导出（CSV/JSON）
+│   │   │   ├── scheduler.py       # 定时任务调度
+│   │   │   └── db_manager.py      # 数据库管理（后端 MySQL 直连）
 │   │   ├── services/              # 业务逻辑层
 │   │   │   ├── proxysql.py        # ProxySQL 连接池与查询
+│   │   │   ├── mysql_client.py    # MySQL 后端直连客户端
 │   │   │   ├── wizard_engine.py   # 向导引擎核心 + 63 向导注册
 │   │   │   ├── wizards/           # 向导具体实现（10 个模块）
 │   │   │   ├── sync_service.py    # 配置同步服务
 │   │   │   ├── cluster_service.py # 集群管理服务
 │   │   │   ├── query_engine.py    # SQL 查询引擎
 │   │   │   ├── dashboard_service.py # 监控数据服务
-│   │   │   └── schema_service.py  # Schema 内省服务
+│   │   │   ├── schema_service.py  # Schema 内省服务
+│   │   │   ├── cache_service.py   # 缓存服务
+│   │   │   └── scheduler_service.py # 定时任务调度服务
 │   │   ├── models/                # Pydantic 数据模型
 │   │   ├── middleware/            # JWT 认证中间件
 │   │   ├── generated/             # 代码生成器输出
@@ -107,25 +115,61 @@ proxysql-admin-webui/
 │   └── requirements.txt
 ├── frontend/                      # React + Vite 前端
 │   ├── src/
-│   │   ├── api/                   # API 客户端（9 个命名空间）
+│   │   ├── api/                   # API 客户端（11 个命名空间）
+│   │   │   └── client.ts          # 所有 API 函数定义
 │   │   ├── components/            # 共享组件
-│   │   ├── pages/                 # 页面组件（12 个页面）
+│   │   │   ├── layout/            # 布局组件（MainLayout）
+│   │   │   ├── ErrorBoundary.tsx  # 错误边界
+│   │   │   ├── GlobalSearch.tsx   # 全局搜索（Ctrl+K）
+│   │   │   ├── LoadingFallback.tsx # 加载等待组件
+│   │   │   ├── PageSkeleton.tsx   # 页面骨架屏
+│   │   │   ├── ServerSelector.tsx # 服务器选择器
+│   │   │   ├── ThemeToggle.tsx    # 主题切换
+│   │   │   └── LanguageSwitcher.tsx # 语言切换
+│   │   ├── pages/                 # 页面组件（15 个页面）
+│   │   │   ├── LoginPage.tsx      # 登录页
+│   │   │   ├── DashboardPage.tsx  # 仪表盘
+│   │   │   ├── WizardsPage.tsx    # 配置向导
+│   │   │   ├── TemplateWizardPage.tsx # 快速部署模板
+│   │   │   ├── TableBrowserPage.tsx # 表浏览器
+│   │   │   ├── QueryConsolePage.tsx # SQL 控制台
+│   │   │   ├── ConfigSyncPage.tsx # 配置同步
+│   │   │   ├── ConfigDiffPage.tsx # 配置差异
+│   │   │   ├── ServersPage.tsx    # 服务器管理
+│   │   │   ├── UsersPage.tsx      # 用户管理
+│   │   │   ├── SettingsPage.tsx   # 系统设置
+│   │   │   ├── ClustersPage.tsx   # 集群列表
+│   │   │   ├── ClusterDetailPage.tsx # 集群详情
+│   │   │   ├── BackupPage.tsx     # 配置备份
+│   │   │   └── DatabaseManagerPage.tsx # 数据库管理
 │   │   ├── stores/                # Zustand 状态管理
+│   │   │   └── authStore.ts       # 认证状态
 │   │   ├── hooks/                 # 自定义 React Hooks
-│   │   └── i18n/                  # 国际化资源（zh-CN, en-US）
+│   │   ├── i18n/                  # 国际化资源
+│   │   │   └── locales/           # 语言文件（zh-CN, en-US）
+│   │   └── main.tsx               # 应用入口
 │   ├── package.json
 │   └── vite.config.ts
 ├── docker/                        # Docker 部署配置
-│   └── docker-compose.yml
 ├── docs/                          # 文档
+│   ├── index.md                   # 用户手册首页
+│   ├── getting-started.md         # 快速入门
 │   ├── USER_MANUAL.md             # 用户手册
-│   └── WIZARD_GUIDE.md            # 配置向导完整指南
+│   ├── WIZARD_GUIDE.md            # 配置向导完整指南
+│   ├── DEPLOYMENT.md              # 部署指南
+│   ├── configuration.md           # 配置参考
+│   └── troubleshooting.md         # 故障排除
+├── scripts/                       # 工具脚本
 ├── Dockerfile                     # 多阶段构建
+├── docker-compose.yml             # 生产环境 Docker Compose
+├── docker-compose.test.yml        # 测试环境 Docker Compose
 ├── Makefile
 ├── README.md
 ├── CONTRIBUTING.md                # 本文件
+├── CHANGELOG.md                   # 变更日志
 ├── SECURITY.md                    # 安全策略
-└── TECHNICAL_DOCUMENTATION.md     # 完整技术文档
+├── plan.md                        # 测试环境搭建与任务追踪
+└── mkdocs.yml                     # MkDocs 文档站点配置
 ```
 
 ---
@@ -153,7 +197,8 @@ async def get_server_status(host: str, port: int) -> dict[str, Any]:
 - 所有组件使用 TypeScript 严格模式
 - 状态管理使用 Zustand
 - 国际化使用自定义 `useI18n()` Hook
-- API 调用统一通过 `api/` 目录下的客户端模块
+- API 调用统一通过 `api/client.ts` 中的客户端模块
+- 页面级组件使用 `lazy()` + Suspense 代码分割
 
 ```tsx
 // 好的示例
@@ -233,19 +278,9 @@ DEFINITIONS = {
 }
 ```
 
-### 步骤 4：在向导引擎中注册
+### 步骤 4：添加前端翻译
 
-在 `backend/app/services/wizard_engine.py` 中：
-
-1. 添加 import：
-```python
-from app.services.wizards import (
-    # ... 已有 import ...
-    MyNewWizard,
-)
-```
-
-2. 在 `WIZARD_REGISTRY` 中注册（如果该 ID 尚未在注册表中）或依赖模块合并机制（如果已在 `DEFINITIONS` 中定义）。
+在 `frontend/src/i18n/locales/zh-CN.ts` 和 `en-US.ts` 中添加向导名称、描述和字段标签的翻译。
 
 ### 字段类型参考
 
@@ -270,11 +305,10 @@ from app.services.wizards import (
 
 ```python
 from fastapi import APIRouter, Depends
-from app.middleware.auth import get_current_user
+from app.middleware import get_current_user
 from app.models.user import User
 
-router = APIRouter(prefix="/my-feature", tags=["My Feature"])
-
+router = APIRouter()
 
 @router.get("/status")
 async def get_status(current_user: User = Depends(get_current_user)):
@@ -289,7 +323,7 @@ async def get_status(current_user: User = Depends(get_current_user)):
 ```python
 from app.api.v1 import my_feature
 
-app.include_router(my_feature.router, prefix="/api/v1")
+app.include_router(my_feature.router, prefix="/api/v1/my-feature", tags=["My Feature"])
 ```
 
 ### 步骤 3：添加前端 API 客户端
@@ -298,10 +332,7 @@ app.include_router(my_feature.router, prefix="/api/v1")
 
 ```typescript
 export const myFeatureApi = {
-  getStatus: (serverId: string) =>
-    api.get(`/api/v1/my-feature/status`, {
-      headers: { 'X-Server-Id': serverId },
-    }),
+  getStatus: () => apiClient.get('/api/v1/my-feature/status'),
 }
 ```
 
@@ -331,18 +362,22 @@ export default function MyNewPage() {
 
 ### 步骤 2：添加路由
 
-在 `frontend/src/App.tsx` 中添加路由：
+在 `frontend/src/App.tsx` 中添加 lazy import 和路由：
 
 ```tsx
-import MyNewPage from './pages/MyNewPage'
+const MyNewPage = lazy(() => import('./pages/MyNewPage'))
 
 // 在 Routes 中添加：
-<Route path="/my-new-page" element={<MyNewPage />} />
+<Route path="my-new-page" element={
+  <Suspense fallback={<PageSkeleton />}>
+    <MyNewPage />
+  </Suspense>
+} />
 ```
 
 ### 步骤 3：添加侧边栏导航
 
-在 `frontend/src/components/layout/MainLayout.tsx` 的导航菜单中添加条目。
+在 `frontend/src/components/layout/MainLayout.tsx` 的 `navItems` 数组中添加条目。
 
 ### 步骤 4：添加国际化文本
 
@@ -429,7 +464,8 @@ async def test_my_feature():
 4. **更新文档**：
    - 如果是新功能，更新 `USER_MANUAL.md`
    - 如果是新向导，更新 `WIZARD_GUIDE.md`
-   - 如果是 API 变更，更新 `TECHNICAL_DOCUMENTATION.md`
+   - 如果是 API 变更，更新相关 API 文档
+   - 更新 `CHANGELOG.md` 记录变更
 
 5. **运行测试** 确保全部通过：
    ```bash
@@ -486,9 +522,14 @@ async def test_my_feature():
 | `api` | API 端点 |
 | `sync` | 配置同步 |
 | `auth` | 认证相关 |
+| `dbm` | 数据库管理 |
+| `template` | 快速部署模板 |
+| `backup` | 配置备份 |
+| `cluster` | 集群管理 |
 | `docs` | 文档 |
 | `docker` | Docker 部署 |
 | `test` | 测试 |
+| `i18n` | 国际化 |
 
 ### 示例
 
@@ -504,13 +545,13 @@ Closes #123
 ```
 
 ```
-fix(backend): 修复配置同步时 PostgresSQL 连接超时
+fix(backend): 修复配置同步时 PostgreSQL 连接超时
 
 将 aiomysql 连接池超时时间从 10s 增加到 30s。
 ```
 
 ```
-docs: 更新用户手册，添加集群管理章节
+docs: 更新用户手册，添加数据库管理章节
 ```
 
 ```

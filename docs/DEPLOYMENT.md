@@ -1,6 +1,6 @@
 # ProxySQL Admin WebUI — 生产部署指南
 
-> **语言**: 简体中文 | **版本**: v1.0.0 | **更新日期**: 2026-06-22
+> **语言**: 简体中文 | **版本**: v1.0.0 | **更新日期**: 2026-07-04
 
 本文档描述在生产环境中部署 ProxySQL Admin WebUI 的推荐方案。
 
@@ -27,26 +27,28 @@
 ## 架构概览
 
 ```
-                           ┌──────────────────────────────────┐
-                           │     ProxySQL Admin WebUI         │
-  Browser ──HTTPS──▶ Nginx ──HTTP──▶ uvicorn (:8080)          │
-                           │         ├─ REST / WebSocket API  │
-                           │         └─ StaticFiles (SPA)     │
-                           │                │                 │
-                           │                │ MySQL Protocol  │
-                           │                ▼                 │
-                           │    ProxySQL Admin (:6032)        │
-                           └──────────────────────────────────┘
-                                           │
-                               ┌───────────┼───────────┐
-                               ▼           ▼           ▼
-                           MySQL-1     MySQL-2     PostgreSQL
+                         ┌──────────────────────────────────┐
+                         │     ProxySQL Admin WebUI         │
+Browser ──HTTPS──▶ Nginx ──HTTP──▶ uvicorn (:8080)          │
+                         │         ├─ REST / WebSocket API  │
+                         │         └─ StaticFiles (SPA)     │
+                         │                │                 │
+                         │                │ MySQL Protocol  │
+                         │                ▼                 │
+                         │    ProxySQL Admin (:6032)        │
+                         └───────────────┬──────────────────┘
+                                         │
+                    ┌────────────────────┼────────────────────┐
+                    ▼                    ▼                    ▼
+                MySQL-1             MySQL-2            PostgreSQL
+             (后端数据库)         (后端数据库)         (后端数据库)
 ```
 
 **关键设计**：
 - **单进程部署**：FastAPI 进程同时提供 API 和前端静态文件，无需额外的 nginx 容器
 - 前端 React SPA 构建后嵌入后端镜像，同源部署，无跨域问题
 - **可选用外部 nginx**：仅当需要 HTTPS 终止、限流或额外安全头时添加
+- **数据库管理**：通过 ProxySQL 的 `mysql_users` 表获取业务用户凭据，直接连接后端 MySQL 进行数据库管理操作
 
 ---
 
