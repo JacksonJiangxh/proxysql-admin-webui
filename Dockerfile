@@ -42,13 +42,15 @@ VOLUME ["/app/data"]
 # Change ownership to non-root user
 RUN chown -R proxysql:proxysql /app
 
+# Entrypoint: auto-fix bind mount permissions before starting the app
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Health check: verify the API is responding
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8080/api/v1/health || exit 1
 
 EXPOSE 8080
 
-# Run as non-root user
-USER proxysql
-
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
