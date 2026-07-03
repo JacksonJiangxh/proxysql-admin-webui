@@ -29,7 +29,8 @@ if [ "$(id -u)" = "0" ]; then
     fi
 
     # 验证 proxysql 用户是否能写入
-    if ! su -s /bin/sh -c "touch '$DATA_DIR/.write_test' && rm -f '$DATA_DIR/.write_test'" proxysql 2>/dev/null; then
+    if ! runuser -u proxysql -- touch "$DATA_DIR/.write_test" 2>/dev/null || \
+       ! runuser -u proxysql -- rm -f "$DATA_DIR/.write_test" 2>/dev/null; then
         echo ""
         echo "ERROR: /app/data is not writable by the proxysql user."
         echo ""
@@ -46,7 +47,7 @@ if [ "$(id -u)" = "0" ]; then
     fi
 
     echo "[entrypoint] Permissions OK, starting as proxysql user ..."
-    exec su -s /bin/sh -c 'exec "$@"' _ proxysql "$@"
+    exec runuser -u proxysql -- "$@"
 fi
 
 # 非 root（兼容性回退）
