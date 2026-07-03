@@ -57,21 +57,14 @@ if _ENV_FILE is not None:
 class Settings:
     """Application settings loaded from environment variables."""
 
-    # Security
+    # JWT
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-change-in-production-min-32-chars!!")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR}/app.db")
-
-    # CORS
-    CORS_ORIGINS: list[str] = [
-        origin.strip()
-        for origin in os.getenv("CORS_ORIGINS", "http://localhost:8080,http://localhost:5173").split(",")
-        if origin.strip()
-    ]
 
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
@@ -80,11 +73,9 @@ class Settings:
     PROXYSQL_DEFAULT_HOST: str = os.getenv("PROXYSQL_DEFAULT_HOST", "127.0.0.1")
     PROXYSQL_DEFAULT_PORT: int = int(os.getenv("PROXYSQL_DEFAULT_PORT", "6032"))
 
-    # Encryption key for stored credentials (must be set via environment variable)
+    # Encryption key for stored ProxySQL credentials
     FERNET_KEY: str = os.getenv("FERNET_KEY", "")
 
-    # Validate the key early so the app fails with a clear message at startup
-    # rather than crashing deep inside a module import.
     _fernet_valid = False
     if FERNET_KEY:
         try:
@@ -99,60 +90,17 @@ class Settings:
         import warnings
         if FERNET_KEY:
             warnings.warn(
-                f"FERNET_KEY is invalid ({FERNET_KEY[:20]}...). "
-                "Auto-generating a temporary key. "
-                "Set a valid FERNET_KEY environment variable for production use.",
+                f"FERNET_KEY is invalid. Auto-generating a temporary key. "
+                "Set FERNET_KEY env var for persistence across restarts.",
                 RuntimeWarning,
             )
         else:
             warnings.warn(
                 "FERNET_KEY not set. Auto-generated a temporary key. "
-                "Set FERNET_KEY environment variable for production use.",
+                "Set FERNET_KEY env var for persistence across restarts.",
                 RuntimeWarning,
             )
         FERNET_KEY = Fernet.generate_key().decode()
-
-    # ── Rate Limiting Settings ────────────────────────────────
-    # Set RATE_LIMIT_ENABLED=false to temporarily disable rate limiting
-    # (useful for debugging or internal deployments behind a trusted proxy).
-    RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() in ("1", "true", "yes")
-    # Global rate limit: maximum requests per IP per window
-    RATE_LIMIT_GLOBAL_MAX: int = int(os.getenv("RATE_LIMIT_GLOBAL_MAX", "100"))
-    RATE_LIMIT_GLOBAL_WINDOW: int = int(os.getenv("RATE_LIMIT_GLOBAL_WINDOW", "60"))  # seconds
-    # Per-endpoint rate limits
-    RATE_LIMIT_LOGIN_MAX: int = int(os.getenv("RATE_LIMIT_LOGIN_MAX", "5"))
-    RATE_LIMIT_LOGIN_WINDOW: int = int(os.getenv("RATE_LIMIT_LOGIN_WINDOW", "60"))
-    RATE_LIMIT_WIZARD_MAX: int = int(os.getenv("RATE_LIMIT_WIZARD_MAX", "10"))
-    RATE_LIMIT_WIZARD_WINDOW: int = int(os.getenv("RATE_LIMIT_WIZARD_WINDOW", "60"))
-    RATE_LIMIT_QUERY_MAX: int = int(os.getenv("RATE_LIMIT_QUERY_MAX", "20"))
-    RATE_LIMIT_QUERY_WINDOW: int = int(os.getenv("RATE_LIMIT_QUERY_WINDOW", "60"))
-
-    # ── Security Policy Settings ──────────────────────────────────────
-    SECURITY_MIN_PASSWORD_LENGTH: int = int(
-        os.getenv("SECURITY_MIN_PASSWORD_LENGTH", "8")
-    )
-    SECURITY_MAX_LOGIN_ATTEMPTS: int = int(
-        os.getenv("SECURITY_MAX_LOGIN_ATTEMPTS", "5")
-    )
-    SECURITY_SESSION_IDLE_TIMEOUT: int = int(
-        os.getenv("SECURITY_SESSION_IDLE_TIMEOUT", "30")
-    )  # minutes
-
-    # ── Request Body Size Limit ───────────────────────────────
-    # Maximum request body size in bytes for POST/PUT/PATCH requests.
-    # Default: 10 MB. Prevents memory exhaustion / DoS via oversized payloads.
-    # Set higher for multi-file upload scenarios.
-    MAX_REQUEST_BODY_SIZE: int = int(os.getenv("MAX_REQUEST_BODY_SIZE", str(10 * 1024 * 1024)))  # 10 MB
-
-    # ── Server-side Cache Settings ──────────────────────────────
-    # Caching reduces repeated ProxySQL queries for dashboard snapshots and
-    # config diffs.  Uses in-memory TTLCache (single-process safe).
-    # Future: set CACHE_BACKEND=redis for multi-process deployments.
-    CACHE_ENABLED: bool = os.getenv("CACHE_ENABLED", "true").lower() in ("1", "true", "yes")
-    # Dashboard snapshot TTL: short-lived, data changes every few seconds.
-    CACHE_TTL_DASHBOARD: int = int(os.getenv("CACHE_TTL_DASHBOARD", "10"))
-    # Config diff TTL: medium-lived, invalidated on sync operations.
-    CACHE_TTL_CONFIG_DIFF: int = int(os.getenv("CACHE_TTL_CONFIG_DIFF", "60"))
 
     # Initial admin user (created on first startup)
     INITIAL_ADMIN_USER: str = os.getenv("PROXYWEB_ADMIN_USER", "admin")

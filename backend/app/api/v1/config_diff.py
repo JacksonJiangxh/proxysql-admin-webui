@@ -3,14 +3,13 @@
 Compares Disk / Memory / Runtime layers of ProxySQL configuration tables
 and returns row-level differences (Git-style +/~/- indicators).
 
-Results are cached server-side for {TTL}s (configurable via CACHE_TTL_CONFIG_DIFF).
+Results are cached server-side for 60s.
 Cache is invalidated on sync operations (apply/save/discard/load).
 """
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Optional
 
-from app.config import settings
 from app.middleware import get_current_user
 from app.schemas.config_diff import ConfigDiffResponse
 from app.schemas.response import RESPONSE_AUTH, RESPONSE_500, HTTPError
@@ -41,8 +40,7 @@ _SYNC_TABLE_PREFIXES = [
     summary="Get config diff",
     description="Compare Memory and Runtime layers for all (or a specific) "
                 "config table. Returns per-table row-level differences "
-                "(added, removed, unchanged). "
-                f"Results cached for {settings.CACHE_TTL_CONFIG_DIFF}s.",
+                "(added, removed, unchanged). Results cached for 60s.",
 )
 async def get_config_diff(
     server_id: str,
@@ -63,10 +61,9 @@ async def get_config_diff(
     - Rows that differ (modified)
     """
     # Try cache first
-    if settings.CACHE_ENABLED:
-        cached = cache_service.get_config_diff(server_id, table)
-        if cached is not None:
-            return cached
+    cached = cache_service.get_config_diff(server_id, table)
+    if cached is not None:
+        return cached
 
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
 
@@ -132,7 +129,6 @@ async def get_config_diff(
     }
 
     # Store in cache
-    if settings.CACHE_ENABLED:
-        cache_service.set_config_diff(server_id, table, result)
+    cache_service.set_config_diff(server_id, table, result)
 
     return result

@@ -18,7 +18,7 @@ help:
 	@echo "  make test-quick        快速测试 L0-L3 (无需 Docker)"
 	@echo "  make test-api          真实环境 API 冒烟测试 (需要 Docker + 后端)"
 	@echo "  make test-full         全层级测试 L0-L5"
-	@echo "  make test-runner       启动交互式 API 测试 shell (自动登录+CSRF)"
+	@echo "  make test-runner       启动交互式 API 测试 shell (自动登录)"
 	@echo "  make lint              运行代码检查 (ruff + eslint)"
 	@echo "  make lint-frontend     仅检查前端代码"
 	@echo "  make docker-test       运行 Docker Compose 集成测试"
@@ -74,7 +74,7 @@ test-runner:
 	@echo "Available commands: api_get, api_post, api_put, api_delete"
 	@echo "Example: api_get /api/v1/servers"
 	@echo ""
-	bash --rcfile test_runner.sh
+	bash --init-file test_runner.sh
 
 lint:
 	cd backend && ruff check app/

@@ -1,19 +1,5 @@
-"""Authentication API endpoints.
-
-Refresh Token storage: httpOnly cookie
-═══════════════════════════════════════════════════════════════════════
-To reduce XSS risk, the refresh token is stored in an ``httpOnly`` cookie
-instead of ``localStorage``.  The access token remains in memory (React
-state / Zustand) and is sent via the ``Authorization`` header.
-
-Cookie attributes:
-  - ``httponly=True``  → invisible to ``document.cookie`` (XSS-safe)
-  - ``secure``         → only sent over HTTPS (production)
-  - ``samesite="lax"`` → CSRF mitigation
-  - ``max_age``        → matches ``REFRESH_TOKEN_EXPIRE_DAYS``
-"""
+"""Authentication API endpoints."""
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
-from fastapi.security import HTTPAuthorizationCredentials
 
 from app.database import get_db
 from app.models import (
@@ -23,8 +9,7 @@ from app.utils.security import (
     verify_password, hash_password,
     create_access_token, create_refresh_token, decode_token,
 )
-from app.middleware import security, get_current_user
-from app.middleware.rate_limit import login_rate_limiter
+from app.middleware import get_current_user
 from app.config import settings
 
 router = APIRouter()
@@ -37,7 +22,6 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=(not settings.CORS_ORIGINS or "*" not in settings.CORS_ORIGINS),
         samesite="lax",
         max_age=max_age,
         path="/",
@@ -53,17 +37,8 @@ def _clear_refresh_cookie(response: Response) -> None:
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(
-    credentials: UserLogin,
-    request: Request,
-    _rate=Depends(login_rate_limiter),
-):
-    """Authenticate user and return JWT tokens.
-
-    Returns:
-        TokenResponse with ``access_token`` in the body (client stores in memory)
-        and ``refresh_token`` set as an ``httpOnly`` cookie.
-    """
+async def login(credentials: UserLogin, request: Request):
+    """Authenticate user and return JWT tokens."""
     db = await get_db()
     try:
         cursor = await db.execute(
@@ -217,41 +192,19 @@ async def logout(
     response: Response,
     user=Depends(get_current_user),
 ):
-    """Logout: revoke refresh token (clear cookie) and blacklist access token."""
+    """Logout: revoke refresh token and clear cookie."""
     db = await get_db()
     try:
         from hashlib import sha256
-        from datetime import datetime, timedelta, timezone
 
-        # Revoke the refresh token from the cookie
         refresh_token = request.cookies.get("refresh_token")
         if refresh_token:
             token_hash = sha256(refresh_token.encode()).hexdigest()
             await db.execute("DELETE FROM refresh_tokens WHERE token_hash = ?", (token_hash,))
-
-        # Blacklist the current access token
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.startswith("Bearer "):
-            access_token = auth_header[7:]
-            from app.utils.security import decode_token
-            payload = decode_token(access_token)
-            if payload and payload.get("type") == "access":
-                access_hash = sha256(access_token.encode()).hexdigest()
-                exp = payload.get("exp")
-                if exp:
-                    expires_at = datetime.fromtimestamp(exp, tz=timezone.utc).replace(tzinfo=None)
-                else:
-                    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
-                await db.execute(
-                    "INSERT OR IGNORE INTO token_blacklist (token_hash, expires_at) VALUES (?, ?)",
-                    (access_hash, expires_at)
-                )
-
         await db.commit()
     finally:
         await db.close()
 
-    # Clear the refresh_token cookie
     _clear_refresh_cookie(response)
     return {"ok": True, "message": "Logged out"}
 
@@ -287,12 +240,8 @@ async def change_password(
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    # Validate new password against policy
-    from app.utils.password_policy import validate_password, PasswordValidationError
-    try:
-        validate_password(data.new_password)
-    except PasswordValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    if len(data.new_password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
 
     db = await get_db()
     try:

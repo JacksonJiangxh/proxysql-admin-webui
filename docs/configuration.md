@@ -15,7 +15,6 @@
 | `DATABASE_URL` | 否 | `sqlite:///data/app.db` | 数据库连接字符串，默认使用 SQLite |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | 否 | `60` | JWT 访问令牌过期时间（分钟），超时后需重新登录 |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | 否 | `7` | JWT 刷新令牌过期时间（天） |
-| `CORS_ORIGINS` | 否 | `http://localhost:5173` | CORS 允许的来源域名，多个用逗号分隔 |
 | `LOG_LEVEL` | 否 | `INFO` | 日志级别：`DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `PROXYSQL_DEFAULT_HOST` | 否 | `127.0.0.1` | 默认 ProxySQL 管理接口的 IP 地址 |
 | `PROXYSQL_DEFAULT_PORT` | 否 | `6032` | 默认 ProxySQL 管理接口的端口 |
@@ -74,29 +73,9 @@ volumes:
 
 - 用户名：`admin`（默认）
 - 密码：`admin`（默认）
-- 角色：`Admin`（最高权限）
 
 !!! danger "生产环境"
     生产环境必须修改默认密码！首次登录后请立即通过「用户管理」页面修改密码。
-
----
-
-## 密码策略
-
-内置密码复杂度要求：
-
-- 最小长度：8 位
-- 最大登录尝试次数：5 次（超过锁定）
-- 会话空闲超时：30 分钟
-
----
-
-## 速率限制
-
-| 端点类型 | 限制 | 说明 |
-|---------|------|------|
-| 登录接口 | 5 次/分钟 | 防止暴力破解 |
-| API 接口 | 100 次/分钟 | 防止 API 滥用 |
 
 ---
 

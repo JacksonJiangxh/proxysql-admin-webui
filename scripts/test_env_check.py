@@ -157,8 +157,6 @@ def main():
             content = f.read()
         check("PROXYSQL user = proxysql_remote",
               "proxysql_remote" in content and "PROXYSQL_DEFAULT_USER" in content)
-        check("RATE_LIMIT_ENABLED = false",
-              "RATE_LIMIT_ENABLED=false" in content or "RATE_LIMIT_ENABLED = false" in content)
 
     # ── Summary ──
     total = passed + failed

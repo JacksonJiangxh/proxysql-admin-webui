@@ -2,68 +2,39 @@ import axios from 'axios'
 
 export const apiClient = axios.create({
   baseURL: '',
-  withCredentials: true,   // send httpOnly cookies (refresh_token) with requests
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Request interceptor: attach auth token (from Zustand) + CSRF token
+// Request interceptor: attach JWT token from Zustand memory store
 apiClient.interceptors.request.use((config) => {
-  // Dynamically read token from Zustand store (memory-only, not localStorage)
   const state = window.__AUTH_STORE__ || null
   const token = state ? state.token : null
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
-  // Attach CSRF token for state-changing requests.
-  // The backend CSRFMiddleware uses the Double Submit Cookie pattern:
-  // the token is read from the csrf_token cookie and sent back in the
-  // X-CSRF-Token header.
-  const method = (config.method || 'get').toLowerCase()
-  if (['post', 'put', 'patch', 'delete'].includes(method)) {
-    const csrfToken = getCookie('csrf_token')
-    if (csrfToken) {
-      config.headers['X-CSRF-Token'] = csrfToken
-    }
-  }
   return config
 })
 
-// Helper: read a cookie value by name
-function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-  return match ? decodeURIComponent(match[2]) : null
-}
-
-// Response interceptor: handle token refresh
+// Response interceptor: handle 401 via token refresh
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
-      // Try to refresh the access token using the httpOnly refresh_token cookie.
-      // The cookie is automatically sent because withCredentials: true.
-      if (error.config && !error.config._retry) {
-        error.config._retry = true
-        try {
-          const resp = await axios.post('/api/v1/auth/refresh', {}, {
-            withCredentials: true,
-          })
-          // Update access_token in Zustand memory
-          const newToken = resp.data.access_token
-          if (window.__AUTH_STORE__) {
-            window.__AUTH_STORE__.setToken(newToken)
-          }
-          error.config.headers.Authorization = `Bearer ${newToken}`
-          return apiClient(error.config)
-        } catch {
-          // Refresh failed — redirect to login
-          if (window.__AUTH_STORE__) {
-            window.__AUTH_STORE__.setToken(null)
-          }
-          window.location.href = '/login'
+    if (error.response?.status === 401 && error.config && !error.config._retry) {
+      error.config._retry = true
+      try {
+        const resp = await axios.post('/api/v1/auth/refresh', {}, {
+          withCredentials: true,
+        })
+        const newToken = resp.data.access_token
+        if (window.__AUTH_STORE__) {
+          window.__AUTH_STORE__.setToken(newToken)
         }
-      } else {
+        error.config.headers.Authorization = `Bearer ${newToken}`
+        return apiClient(error.config)
+      } catch {
         if (window.__AUTH_STORE__) {
           window.__AUTH_STORE__.setToken(null)
         }

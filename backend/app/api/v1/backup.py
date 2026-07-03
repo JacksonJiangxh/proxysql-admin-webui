@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 from app.schemas.backup import (
     BackupListResponse,
     BackupCreateResponse,
@@ -91,7 +91,7 @@ class BatchCreateRequest(BaseModel):
 async def create_backup(
     server_id: str,
     req: CreateBackupRequest = CreateBackupRequest(),
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Create a configuration backup snapshot from the selected server."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
@@ -173,7 +173,7 @@ async def restore_backup(
     server_id: str,
     backup_id: int,
     req: RestoreRequest = RestoreRequest(),
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Restore configuration from a backup."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
@@ -207,7 +207,7 @@ async def restore_backup(
 async def delete_backup(
     server_id: str,
     backup_id: int,
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Delete a backup."""
     deleted = await backup_service.delete_backup(backup_id)
@@ -229,7 +229,7 @@ async def delete_backup(
 )
 async def batch_delete_backups(
     req: BatchDeleteRequest,
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Delete multiple backups at once."""
     deleted = await backup_service.delete_backups(req.backup_ids)
@@ -250,7 +250,7 @@ async def batch_delete_backups(
 )
 async def batch_create_backups(
     req: BatchCreateRequest,
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Create backups for multiple servers at once."""
     results = await backup_service.create_backups_for_servers(

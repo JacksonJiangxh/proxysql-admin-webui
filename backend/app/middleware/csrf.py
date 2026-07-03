@@ -89,30 +89,54 @@ class CSRFMiddleware:
         # Only validate state-changing methods
         if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
             # For safe methods, pass through and attach CSRF cookie on response
-            await self._wrap_with_csrf_cookie(scope, receive, send)
+            await self._wrap_with_csrf_cookie(scope, receive, send, request)
             return
 
         # Validate CSRF token for state-changing requests
-        if not await self._validate_csrf(request):
+        csrf_result = await self._validate_csrf(request)
+        if not csrf_result[0]:
+            reason = csrf_result[1]
+            # Generate a fresh CSRF token in the 403 response so the client
+            # can retry without needing a separate GET request first.
+            token = secrets.token_hex(32)
+            cookie_value = (
+                f"{self.CSRF_COOKIE}={token}; "
+                f"Path=/; "
+                f"Max-Age={3600 * 24}; "
+                f"SameSite={self.COOKIE_SAMESITE}"
+            )
+            if self.COOKIE_SECURE:
+                cookie_value += "; Secure"
             response = JSONResponse(
                 status_code=403,
                 content={
-                    "detail": "CSRF validation failed. Ensure you're using the app "
-                              "from the legitimate origin and include the X-CSRF-Token header."
+                    "detail": f"CSRF validation failed: {reason}",
+                    "csrf_token": token,
                 },
+                headers={"Set-Cookie": cookie_value},
             )
             await response(scope, receive, send)
             return
 
         # Pass through and rotate CSRF cookie
-        await self._wrap_with_csrf_cookie(scope, receive, send)
+        await self._wrap_with_csrf_cookie(scope, receive, send, request)
 
-    async def _wrap_with_csrf_cookie(self, scope, receive, send):
-        """Call the inner app and append a CSRF cookie to the response."""
+    async def _wrap_with_csrf_cookie(self, scope, receive, send, request: Request = None):
+        """Call the inner app and ensure a CSRF cookie is set on the response.
+
+        Only sets a new cookie if one doesn't already exist on the request,
+        avoiding unnecessary token rotation that can cause race conditions
+        when multiple GET requests are in flight concurrently.
+        """
+        # Use the provided request or create one if not available
+        if request is None:
+            request = Request(scope, receive)
+        existing_token = request.cookies.get(self.CSRF_COOKIE)
 
         async def _send(message):
             if message["type"] == "http.response.start":
-                token = secrets.token_hex(32)
+                # Re-use existing token if present; generate new one only on first visit
+                token = existing_token or secrets.token_hex(32)
                 cookie_value = (
                     f"{self.CSRF_COOKIE}={token}; "
                     f"Path=/; "
@@ -129,16 +153,11 @@ class CSRFMiddleware:
 
         await self.app(scope, receive, _send)
 
-    async def _validate_csrf(self, request: Request) -> bool:
+    async def _validate_csrf(self, request: Request) -> tuple:
         """Validate the CSRF token using Double Submit Cookie pattern.
 
-        The client must:
-        1. Read the csrf_token cookie
-        2. Send the same value in the X-CSRF-Token header
-
-        This ensures that only a page served by the legitimate origin
-        can send valid requests (since cookies can't be read/set by
-        cross-origin scripts).
+        Returns:
+            (True, "") on success, or (False, "reason") on failure.
         """
         # 1. Check Origin/Referer for same-origin policy
         if not _SKIP_ORIGIN_CHECK:
@@ -146,20 +165,23 @@ class CSRFMiddleware:
             if origin:
                 host = request.headers.get("host", "").split(":")[0]
                 if host and not self._is_same_origin(request, origin, host):
-                    return False
+                    return (False, f"origin mismatch: {origin} vs host {host}")
 
         # 2. Check for CSRF token header
         token_header = request.headers.get(self.CSRF_HEADER)
         if not token_header:
-            return False
+            return (False, "missing X-CSRF-Token header")
 
         # 3. Check token cookie exists
         token_cookie = request.cookies.get(self.CSRF_COOKIE)
         if not token_cookie:
-            return False
+            return (False, "missing csrf_token cookie")
 
         # 4. Validate tokens match (constant-time comparison)
-        return secrets.compare_digest(token_header, token_cookie)
+        if not secrets.compare_digest(token_header, token_cookie):
+            return (False, "token mismatch")
+
+        return (True, "")
 
     def _is_same_origin(self, request: Request, origin: str, host: str) -> bool:
         """Check if the origin matches either the request host or a trusted origin.
@@ -186,15 +208,18 @@ class CSRFMiddleware:
 
             request_port_parts = request.headers.get("host", "").split(":")
             request_host = request_port_parts[0]
+            # Respect X-Forwarded-Proto when behind a reverse proxy
+            forwarded_proto = request.headers.get("x-forwarded-proto", "")
+            scheme = forwarded_proto if forwarded_proto in ("http", "https") else request.url.scheme
             request_port = (
                 int(request_port_parts[1]) if len(request_port_parts) > 1
-                else (443 if request.url.scheme == "https" else 80)
+                else (443 if scheme == "https" else 80)
             )
 
             return (
                 origin_host == request_host
                 and origin_port == request_port
-                and parsed.scheme == request.url.scheme
+                and parsed.scheme == scheme
             )
         except Exception:
             # If parsing fails, be permissive

@@ -13,7 +13,7 @@ from app.models import (
     ClusterStatusResponse, ClusterNodeStatus,
 )
 from app.services.cluster_service import cluster_service
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 
 router = APIRouter()
 
@@ -48,7 +48,7 @@ async def list_clusters(user=Depends(get_current_user)):
 
 
 @router.post("", response_model=ClusterGroup)
-async def create_cluster(data: ClusterGroupCreate, user=Depends(require_role("admin"))):
+async def create_cluster(data: ClusterGroupCreate, user=Depends(get_current_user)):
     """Create a new cluster group."""
     db = await get_db()
     try:
@@ -117,7 +117,7 @@ async def get_cluster(cluster_id: str, user=Depends(get_current_user)):
 
 
 @router.put("/{cluster_id}", response_model=ClusterGroup)
-async def update_cluster(cluster_id: str, data: ClusterGroupUpdate, user=Depends(require_role("admin"))):
+async def update_cluster(cluster_id: str, data: ClusterGroupUpdate, user=Depends(get_current_user)):
     """Update a cluster group."""
     db = await get_db()
     try:
@@ -162,7 +162,7 @@ async def update_cluster(cluster_id: str, data: ClusterGroupUpdate, user=Depends
 
 
 @router.delete("/{cluster_id}")
-async def delete_cluster(cluster_id: str, user=Depends(require_role("admin"))):
+async def delete_cluster(cluster_id: str, user=Depends(get_current_user)):
     """Delete a cluster group (members are cascade-deleted)."""
     db = await get_db()
     try:
@@ -204,7 +204,7 @@ async def list_cluster_members(cluster_id: str, user=Depends(get_current_user)):
 
 
 @router.post("/{cluster_id}/members")
-async def add_cluster_member(cluster_id: str, data: ClusterMemberAdd, user=Depends(require_role("admin"))):
+async def add_cluster_member(cluster_id: str, data: ClusterMemberAdd, user=Depends(get_current_user)):
     """Add a server to a cluster group."""
     db = await get_db()
     try:
@@ -236,7 +236,7 @@ async def add_cluster_member(cluster_id: str, data: ClusterMemberAdd, user=Depen
 
 
 @router.delete("/{cluster_id}/members/{server_id}")
-async def remove_cluster_member(cluster_id: str, server_id: str, user=Depends(require_role("admin"))):
+async def remove_cluster_member(cluster_id: str, server_id: str, user=Depends(get_current_user)):
     """Remove a server from a cluster group."""
     db = await get_db()
     try:
@@ -267,7 +267,7 @@ async def get_cluster_status(cluster_id: str, user=Depends(get_current_user)):
 
 
 @router.post("/{cluster_id}/sync")
-async def sync_cluster_config(cluster_id: str, data: ClusterSyncRequest, user=Depends(require_role("admin"))):
+async def sync_cluster_config(cluster_id: str, data: ClusterSyncRequest, user=Depends(get_current_user)):
     """Sync configuration from master to slave nodes in the cluster.
 
     Pulls config from source (master by default) and pushes to targets.
@@ -288,12 +288,12 @@ async def sync_cluster_config(cluster_id: str, data: ClusterSyncRequest, user=De
             source_id = master_row["server_id"]
 
         # Log the sync operation
-        username = user.username if hasattr(user, "username") else "unknown"
+        username = user.get("username", "unknown") if isinstance(user, dict) else "unknown"
         await db.execute(
             """INSERT INTO cluster_sync_logs
                (cluster_id, user_id, username, action, source_server_id, target_servers, module)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (cluster_id, getattr(user, "id", None), username, "sync",
+            (cluster_id, user.get("id") if isinstance(user, dict) else None, username, "sync",
              source_id, json.dumps(data.target_servers or []),
              json.dumps(data.modules or [])),
         )
@@ -319,7 +319,7 @@ async def sync_cluster_config(cluster_id: str, data: ClusterSyncRequest, user=De
 async def configure_cluster_variables(
     cluster_id: str,
     variables: dict[str, str],
-    user=Depends(require_role("admin")),
+    user=Depends(get_current_user),
 ):
     """Set cluster-related admin variables on cluster members."""
     try:

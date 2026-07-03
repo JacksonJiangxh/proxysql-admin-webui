@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 from app.services.template_engine import (
     TEMPLATES, get_template_steps, build_step_payload, build_array_payloads,
 )
@@ -191,7 +191,7 @@ async def preview_template(data: TemplatePreviewRequest, user=Depends(get_curren
 @router.post("/templates/execute")
 async def execute_template(
     data: TemplateExecuteRequest,
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Execute all steps of a template in sequence.
 

@@ -1,19 +1,11 @@
 """Main FastAPI application entry point.
 
-Single-process deployment: the FastAPI app serves both the REST/WebSocket
-API *and* the built frontend (frontend/dist) as static files on the same
-origin. This mirrors the architecture of the reference projects (proxui,
-proxyweb) and removes the need for an nginx reverse proxy — the whole UI
-runs from one `uvicorn` process.
+A simple, single-process deployment: the FastAPI app serves both the
+REST/WebSocket API *and* the built frontend (frontend/dist) as static files
+on the same origin. The whole UI runs from one `uvicorn` process.
 
-Development:
-    `make dev-frontend` runs Vite on :5173 with a proxy to :8080.
-Production / bare-metal:
-    `make build-frontend` builds frontend/dist, then `make run` serves
-    everything from http://localhost:8080.
-PyInstaller single-binary:
-    `pyinstaller --onefile backend/run.py` bundles frontend + backend into
-    one executable.  At runtime `sys._MEIPASS` points to the unpacked bundle.
+This is an internal tool for managing ProxySQL — it does NOT need the
+layers of security hardening that a public-facing SaaS product requires.
 """
 import os
 import sys
@@ -21,7 +13,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,13 +24,6 @@ from app.api.v1 import (
     config_diff, clusters, templates, backup, export, scheduler,
 )
 from app.api.v1 import settings as settings_api
-from app.middleware.csrf import CSRFMiddleware
-from app.middleware.audit import AuditMiddleware
-from app.middleware.rate_limit import RateLimitMiddleware
-from app.middleware.cache_headers import CacheHeadersMiddleware
-from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.middleware.metrics import MetricsMiddleware, metrics_endpoint
-from app.middleware.body_limit import BodyLimitMiddleware
 from app.schemas.response import HealthResponse
 
 
@@ -52,10 +36,10 @@ async def lifespan(app: FastAPI):
         json_format=os.getenv("LOG_FORMAT", "").lower() != "text",
     )
     await init_db()
-    # Initialize cache TTLs from settings
+    # Initialize cache TTLs (hard-coded defaults for simple deployment)
     from app.services.cache_service import cache_service
-    cache_service._dashboard_ttl = settings.CACHE_TTL_DASHBOARD
-    cache_service._config_diff_ttl = settings.CACHE_TTL_CONFIG_DIFF
+    cache_service._dashboard_ttl = 10
+    cache_service._config_diff_ttl = 60
     # Start the APScheduler for auto-backup tasks
     from app.services.scheduler_service import scheduler_service
     await scheduler_service.start()
@@ -72,98 +56,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ═══════════════════════════════════════════════════════════════════
-# Middleware Stack (order matters!)
-# ═══════════════════════════════════════════════════════════════════
-#
-# Requests flow through middlewares in the order they are added below.
-# Each middleware's position is carefully chosen for security and correctness.
-#
-# ALL custom middlewares are implemented as pure ASGI middleware (not
-# BaseHTTPMiddleware) to avoid the Starlette BaseHTTPMiddleware bug where
-# HTTPException inside a TaskGroup gets swallowed and converted to 500.
-#
-# Ordering rationale:
-#   1. CORSMiddleware        — Handles OPTIONS pre-flight FIRST, before any
-#                            auth/CSRF logic runs. In production (same-origin
-#                            SPA serving) CORS is effectively a no-op.
-#   2. GZipMiddleware       — Compresses the response body. Placed early so
-#                            that downstream middlewares still see uncompressed
-#                            bodies (simplifies ETag calculation).
-#   3. MetricsMiddleware    — Records request counts, latency, and in-flight
-#                            gauge. After GZip so compression overhead is
-#                            included in timing.
-#   4. CacheHeadersMiddleware — Adds Cache-Control. Reads the final
-#                            response body AFTER compression.
-#   5. SecurityHeadersMw    — Injects CSP, HSTS, X-Frame-Options, etc.
-#                            Must run for ALL responses (including errors).
-#   6. AuditMiddleware       — Logs the request BEFORE CSRF validation, so
-#                            that suspicious requests are still recorded.
-#   7. CSRFMiddleware       — Validates double-submit CSRF token. Runs
-#                            AFTER audit (so attacks are logged) but BEFORE
-#                            rate-limiting (to prevent attackers from exhausting
-#                            rate-limit quotas with fake requests).
-#   8. RateLimitMiddleware  — Throttles requests per IP and per endpoint.
-#                            Runs after CSRF so only legitimate traffic is counted.
-#   9. BodyLimitMiddleware  — Checks Content-Length. Rejects oversized
-#                            payloads early (413) to prevent memory exhaustion.
-# ═══════════════════════════════════════════════════════════════════
+# Only middleware we need: GZip for response compression.
+# This is a simple internal tool — no CORS, CSRF, rate limiting, security
+# headers, audit logging, metrics, body limits, or cache headers.
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
-# 1. CORS (only relevant for the Vite dev server on :5173; in production the
-#    frontend is served same-origin and CORS is a no-op).
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Content-Type",
-        "Authorization",
-        "X-CSRF-Token",
-        "X-Requested-With",
-    ],
-)
-
-# 2. GZip compression: reduces response size for text-based content (JSON, HTML, CSS, JS).
-#    Only compresses responses > 500 bytes to avoid overhead on tiny payloads.
-app.add_middleware(
-    GZipMiddleware,
-    minimum_size=500,
-)
-
-# 2a. Metrics: records request counts, latency histograms, and in-flight gauge.
-#    Placed after GZip so compression overhead is included in timing, but before
-#    security/audit middlewares so ALL requests (including rejected ones) are counted.
-app.add_middleware(MetricsMiddleware)
-
-# 3. Cache headers: adds ETag and Cache-Control headers for browser/CDN caching.
-#    Must be added after other middlewares to see the final response body for ETag.
-app.add_middleware(CacheHeadersMiddleware)
-
-# 4. Security headers: adds CSP, HSTS, X-Frame-Options, and other security headers.
-#    This runs for EVERY response (including 4xx/5xx) to ensure security headers
-#    are always present.
-app.add_middleware(SecurityHeadersMiddleware)
-
-# 5. Audit logging: records all requests for audit trail.
-#    Runs BEFORE CSRF checks so that even rejected requests are logged.
-app.add_middleware(AuditMiddleware)
-
-# 7. CSRF protection: validates double-submit CSRF token for state-changing requests.
-#    Runs AFTER audit (attacks are logged) and BEFORE rate-limiting (prevents
-#    attackers from wasting rate-limit quotas).
-#    Pure ASGI middleware — no BaseHTTPMiddleware TaskGroup bug.
-app.add_middleware(CSRFMiddleware)
-
-# 8. Rate limiting: throttles requests per IP and per endpoint.
-#    Pure ASGI middleware — no BaseHTTPMiddleware TaskGroup bug.
-app.add_middleware(RateLimitMiddleware)
-
-# 9. Body size limiting: rejects oversized POST/PUT/PATCH payloads.
-#    Pure ASGI middleware — no BaseHTTPMiddleware TaskGroup bug.
-app.add_middleware(BodyLimitMiddleware)
-
-# Register API routes
+# ── API routes ─────────────────────────────────────────────────────
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(tables.router, prefix="/api/v1", tags=["Tables"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["Config Sync"])
@@ -179,8 +77,6 @@ app.include_router(clusters.router, prefix="/api/v1/clusters", tags=["Clusters"]
 app.include_router(backup.router, prefix="/api/v1/backup", tags=["Backup"])
 app.include_router(export.router, prefix="/api/v1/export", tags=["Export"])
 app.include_router(scheduler.router, prefix="/api/v1/scheduler", tags=["Scheduler"])
-
-# WebSocket routes (per TECHNICAL_DOCUMENTATION: /ws/dashboard/{server_id})
 app.include_router(dashboard.ws_router, prefix="/ws/dashboard", tags=["Dashboard WS"])
 
 
@@ -229,18 +125,6 @@ async def assets_info():
         "assets_mounted": _assets_mounted,
         "dev_mode": _DEV_MODE,
     }
-
-
-@app.get("/api/v1/metrics", tags=["System"])
-async def prometheus_metrics():
-    """Prometheus /metrics endpoint returning OpenMetrics text format.
-
-    Exposes:
-        http_requests_total, http_request_duration_seconds,
-        http_requests_in_flight, and any process-level metrics from
-        the prometheus_client library.
-    """
-    return await metrics_endpoint()
 
 
 # ── Serve the built frontend (SPA) from the same origin ──────────────

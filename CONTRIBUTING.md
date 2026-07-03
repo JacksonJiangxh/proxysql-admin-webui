@@ -76,16 +76,16 @@ proxysql-admin-webui/
 │   ├── app/
 │   │   ├── main.py                # FastAPI 入口（同时托管前端静态文件）
 │   │   ├── config.py              # 应用配置管理
-│   │   ├── database.py            # SQLite 持久化（8 张表）
+│   │   ├── database.py            # SQLite 持久化
 │   │   ├── api/v1/                # REST API 端点（12 个路由模块）
 │   │   │   ├── auth.py            # 认证（登录/刷新/登出/修改密码）
 │   │   │   ├── tables.py          # 表管理（CRUD + 分页 + 搜索）
 │   │   │   ├── sync.py            # 配置同步（Apply/Save/Discard/Load）
 │   │   │   ├── query.py           # SQL 查询执行 + 历史
 │   │   │   ├── dashboard.py       # 监控数据 + WebSocket 推送
-│   │   │   ├── users.py           # 用户管理（Admin 权限）
+│   │   │   ├── users.py           # 用户管理
 │   │   │   ├── servers.py         # 多实例管理 + 连接测试
-│   │   │   ├── settings.py        # 系统设置 + 审计日志
+│   │   │   ├── settings.py        # 系统设置
 │   │   │   ├── wizards.py         # 向导模式（预览/执行/历史）
 │   │   │   ├── config_diff.py     # 配置差异对比
 │   │   │   └── clusters.py        # 集群管理
@@ -99,7 +99,7 @@ proxysql-admin-webui/
 │   │   │   ├── dashboard_service.py # 监控数据服务
 │   │   │   └── schema_service.py  # Schema 内省服务
 │   │   ├── models/                # Pydantic 数据模型
-│   │   ├── middleware/            # 认证/审计/CSRF 中间件
+│   │   ├── middleware/            # JWT 认证中间件
 │   │   ├── generated/             # 代码生成器输出
 │   │   └── utils/                 # 工具函数
 │   ├── codegen/                   # 代码生成器源码

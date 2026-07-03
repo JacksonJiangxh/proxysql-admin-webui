@@ -6,7 +6,7 @@ Provides CRUD operations for APScheduler-based auto-backup jobs with CRON suppor
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 from app.schemas.scheduler import (
     ScheduleListResponse,
     ScheduleCreateResponse,
@@ -62,7 +62,7 @@ async def get_schedules(user=Depends(get_current_user)):
 )
 async def create_backup_schedule(
     req: CreateScheduleRequest,
-    user=Depends(require_role("admin")),
+    user=Depends(get_current_user),
 ):
     """Create an auto-backup schedule for a server.
 
@@ -92,7 +92,7 @@ async def create_backup_schedule(
 )
 async def delete_backup_schedule(
     schedule_id: int,
-    user=Depends(require_role("admin")),
+    user=Depends(get_current_user),
 ):
     """Remove an auto-backup schedule."""
     deleted = await scheduler_service.remove_schedule(schedule_id)

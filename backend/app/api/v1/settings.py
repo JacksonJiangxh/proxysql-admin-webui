@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.database import get_db
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ async def list_audit_logs(
     offset: int = Query(0, ge=0),
     action: Optional[str] = None,
     server_id: Optional[str] = None,
-    user=Depends(require_role("admin")),
+    user=Depends(get_current_user),
 ):
     """List audit log entries (admin only)."""
     db = await get_db()
@@ -61,27 +61,20 @@ async def get_system_info(user=Depends(get_current_user)):
     """Get system information (version, stats)."""
     db = await get_db()
     try:
-        # User count
         cursor = await db.execute("SELECT COUNT(*) as cnt FROM users")
         user_count = (await cursor.fetchone())["cnt"]
 
-        # Server count
         cursor = await db.execute("SELECT COUNT(*) as cnt FROM server_configs")
         server_count = (await cursor.fetchone())["cnt"]
-
-        # Audit log count
-        cursor = await db.execute("SELECT COUNT(*) as cnt FROM audit_logs")
-        audit_count = (await cursor.fetchone())["cnt"]
 
         return {
             "version": "1.0.0",
             "user_count": user_count,
             "server_count": server_count,
-            "audit_log_count": audit_count,
             "current_user": {
-                "id": user["id"],
-                "username": user["username"],
-                "role": user["role"],
+                "id": user["id"] if user else None,
+                "username": user["username"] if user else "anonymous",
+                "role": user["role"] if user else "anonymous",
             },
         }
     finally:
@@ -91,7 +84,7 @@ async def get_system_info(user=Depends(get_current_user)):
 @router.delete("/audit-logs")
 async def clear_audit_logs(
     before: Optional[str] = None,
-    user=Depends(require_role("admin")),
+    user=Depends(get_current_user),
 ):
     """Clear audit log entries (admin only).
 

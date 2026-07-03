@@ -32,9 +32,6 @@ DATABASE_URL=sqlite:///data/app_test.db
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
-# CORS
-CORS_ORIGINS=http://localhost:8080,http://localhost:5173
-
 # Logging
 LOG_LEVEL=INFO
 
@@ -48,12 +45,6 @@ PROXYSQL_DEFAULT_PASSWORD=remote123
 # Initial admin credentials
 PROXYWEB_ADMIN_USER=admin
 PROXYWEB_ADMIN_PASSWORD=admin123
-
-# ── Rate Limiting (DISABLED for testing) ──
-RATE_LIMIT_ENABLED=false
-
-# ── Cache (DISABLED for testing) ──
-CACHE_ENABLED=false
 """
     with open(ENV_FILE, "w") as f:
         f.write(content)
@@ -78,7 +69,7 @@ def init_test_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                is_admin INTEGER DEFAULT 1,
+                role TEXT DEFAULT 'admin',
                 is_active INTEGER DEFAULT 1,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))

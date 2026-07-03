@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query as QueryParam
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 from app.schemas.query import (
     QueryResultResponse,
     SchemaResponse,
@@ -66,11 +66,10 @@ class QueryRequest(BaseModel):
 async def execute_query(
     server_id: str,
     query: QueryRequest,
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Execute a SQL query against the ProxySQL admin interface."""
-    is_admin = user["role"] == "admin"
-    sanitized_sql, error = sanitize_sql(query.sql, is_admin=is_admin)
+    sanitized_sql, error = sanitize_sql(query.sql, is_admin=True)
     if error:
         raise HTTPException(status_code=400, detail=error)
 

@@ -80,8 +80,7 @@ mysql -h 127.0.0.1 -P 6032 -u proxysql_remote -premote123 -e "SELECT 1;"
 | `PROXYSQL_DEFAULT_PASSWORD` | `remote123` | 远程用户密码 |
 | `PROXYWEB_ADMIN_USER` | `admin` | WebUI 登录用户名 |
 | `PROXYWEB_ADMIN_PASSWORD` | `admin123` | WebUI 登录密码 |
-| `RATE_LIMIT_ENABLED` | `false` | 测试环境禁用限流 |
-| `CACHE_ENABLED` | `false` | 测试环境禁用缓存 |
+
 
 ### 1.6 启动应用服务
 
@@ -112,7 +111,7 @@ c.execute('''
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    is_admin INTEGER DEFAULT 1,
+    role TEXT DEFAULT 'admin',
     is_active INTEGER DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
@@ -253,8 +252,6 @@ git push
 | # | 端点 | 问题 | 状态 |
 |---|------|------|------|
 | 1 | `POST /servers/{id}/test` | 连接测试返回 500（server 使用了 `admin` 用户而非 `proxysql_remote`） | 待修复 |
-| 2 | `POST /auth/login` | 多次登录触发 429 限流（即使 RATE_LIMIT_ENABLED=false） | 待修复 |
-| 3 | `DELETE /servers/{id}` | CSRF token 过期后 DELETE 返回 500 | 测试已适配 |
 
 ---
 
@@ -296,7 +293,7 @@ curl -s http://localhost:8080/api/v1/health | python3 -m json.tool
 
 | 脚本 | 用途 | 使用方式 |
 |------|------|----------|
-| `test_runner.sh` | 通用 API 测试运行器，自动处理 JWT 登录 + CSRF 认证 | `source test_runner.sh` 后使用 `api_get`/`api_post`/`api_put`/`api_delete` |
+| `test_runner.sh` | 通用 API 测试运行器，自动处理 JWT 登录 | `source test_runner.sh` 后使用 `api_get`/`api_post`/`api_put`/`api_delete` |
 
 ### 6.2 `scripts/` 目录
 
@@ -435,13 +432,13 @@ scripts/
 | 7 | **Config Diff 配置差异** | 比较 MEMORY 与 RUNTIME 配置差异 | `/api/v1/config-diff` | `/config-diff` |
 | 8 | **Wizards 向导** | 6 个向导（W01-W06），表单填写→SQL 预览→执行→自动同步 | `/api/v1/wizards` | `/wizards` |
 | 9 | **Templates 模板向导** | 多步骤模板向导，支持架构模式选择 | `/api/v1/wizards` | `/template` |
-| 10 | **Users 用户管理** | 3 角色 RBAC (admin/operator/viewer)，CRUD | `/api/v1/users` | `/users` |
+| 10 | **Users 用户管理** | 多用户管理，CRUD | `/api/v1/users` | `/users` |
 | 11 | **Clusters 集群管理** | 多 ProxySQL 集群管理、成员发现、配置同步、变量配置 | `/api/v1/clusters` | `/clusters` |
 | 12 | **Backup 备份管理** | 创建/下载/恢复/删除 ProxySQL 配置备份 | `/api/v1/backup` | `/backup` |
 | 13 | **Export 导出** | 导出表数据或查询结果为 CSV/JSON | `/api/v1/export` | - |
 | 14 | **Scheduler 调度器** | APScheduler 自动备份任务状态 | `/api/v1/scheduler` | - |
-| 15 | **Settings 系统设置** | 系统信息 + 审计日志查看/清除 | `/api/v1/settings` | `/settings` |
-| 16 | **Middleware 中间件** | CORS/GZip/Metrics/CSRF/Audit/RateLimit/BodyLimit/SecurityHeaders | - | - |
+| 15 | **Settings 系统设置** | 系统信息 | `/api/v1/settings` | `/settings` |
+| 16 | **Middleware 中间件** | GZip | - | - |
 | 17 | **WebSocket** | Dashboard 实时数据推送（5s 间隔，指数退避重连） | `/ws/dashboard` | - |
 | 18 | **SPA 静态服务** | 生产模式 FastAPI 直接 serve 前端 dist | `/{path}` | - |
 
@@ -462,8 +459,8 @@ scripts/
 | **L1** Import 检查 | `test_l1_imports.py` | Python | <10s | 循环导入、缺失依赖、NameError |
 | **L2** 静态分析 | `test_l2_lint.py` | ruff + eslint | <20s | 未使用变量、F821 未定义、代码异味 |
 | **L3** 前端构建 | `test_l3_frontend.py` | Node.js | <30s | TypeScript 编译错误、Vite 打包错误 |
-| **L4** API 全端点冒烟 | `test_l4_api_smoke.py` | Docker + 后端 | <120s | 404/500/认证/CSRF/数据完整性 |
-| **L5** 全链路集成 | `test_l5_integration.py` | Docker + 后端 | <180s | CRUD 周期/RBAC/向导执行/配置同步/备份恢复 |
+| **L4** API 全端点冒烟 | `test_l4_api_smoke.py` | Docker + 后端 | <120s | 404/500/认证/数据完整性 |
+| **L5** 全链路集成 | `test_l5_integration.py` | Docker + 后端 | <180s | CRUD 周期/向导执行/配置同步/备份恢复 |
 
 ### 8.3 测试覆盖矩阵
 
@@ -561,15 +558,14 @@ L4 测试 `test_l4_api_smoke.py` 覆盖以下端点（共 ~60 个 HTTP 请求）
 | Config Diff | GET diff | 配置差异比较 |
 | Wizards | GET definitions, GET {id}, POST preview, POST execute, GET history, POST lookup | 完整向导生命周期 |
 | Templates | GET list, GET {id}, GET steps, POST preview, POST execute | 模板向导 |
-| Users | GET list, POST create (operator+viewer), DELETE {id} | RBAC 用户管理 |
+| Users | GET list, POST create, DELETE {id} | 用户管理 |
 | Clusters | GET list, POST create, GET {id}, PUT {id}, GET members, GET status, DELETE {id} | 集群 CRUD |
 | Backup | POST create, GET list, GET download, DELETE {id} | 备份生命周期 |
 | Export | GET table (JSON), GET table (CSV) | 多格式导出 |
 | Scheduler | GET status | 调度器状态 |
-| Settings | GET info, GET audit-logs, GET audit-logs?action= | 系统信息 + 审计日志 |
-| Health | GET health, GET metrics | 健康检查 + Prometheus |
+| Settings | GET info | 系统信息 |
+| Health | GET health | 健康检查 |
 | SPA | GET / | 前端静态服务 |
-| Middleware | CSRF token 验证、Rate limit 行为 | 安全中间件 |
 
 ### 8.8 L5 测试覆盖详情
 
@@ -579,7 +575,7 @@ L5 测试 `test_l5_integration.py` 包含 10 个深度测试场景：
 |---|------|---------|
 | 1 | Connectivity Chain | App → ProxySQL → MySQL 全链路连通性 |
 | 2 | Full CRUD Cycle | mysql_servers + mysql_users 完整 CRUD + 验证 |
-| 3 | RBAC Authorization | admin/operator/viewer 三级权限隔离验证 |
+| 3 | Config Sync | APPLY/SAVE/LOAD/DISCARD 全周期测试 |
 | 4 | Config Sync Cycle | APPLY → SAVE → LOAD → DISK 完整同步周期 |
 | 5 | Wizard Execution | W01+W02 向导执行 + ProxySQL 状态验证 + 清理 |
 | 6 | Query Across Layers | admin/stats/monitor 三层 SQL 查询 |

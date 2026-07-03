@@ -110,9 +110,6 @@ DATABASE_URL=sqlite:///data/app.db
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
-# ── CORS（逗号分隔多个 origin）────────────────────
-CORS_ORIGINS=http://localhost:8080,http://localhost:5173
-
 # ── 日志 ───────────────────────────────────────────
 LOG_LEVEL=INFO
 
@@ -307,9 +304,7 @@ spec:
           env:
             - name: DATABASE_URL
               value: "sqlite:///data/app.db"
-            - name: CORS_ORIGINS
-              value: "https://proxysql-admin.example.com"
-          envFrom:
+            envFrom:
             - secretRef:
                 name: proxysql-admin-secrets
           volumeMounts:
@@ -491,7 +486,6 @@ server {
 | `DATABASE_URL` | 否 | `sqlite:///data/app.db` | 数据库连接 |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | 否 | `60` | JWT 访问令牌过期时间 |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | 否 | `7` | JWT 刷新令牌过期时间 |
-| `CORS_ORIGINS` | 否 | `http://localhost:8080,http://localhost:5173` | CORS 允许的来源 |
 | `LOG_LEVEL` | 否 | `INFO` | 日志级别 (DEBUG/INFO/WARNING/ERROR) |
 | `PROXYSQL_DEFAULT_HOST` | 否 | `127.0.0.1` | 默认 ProxySQL 主机 |
 | `PROXYSQL_DEFAULT_PORT` | 否 | `6032` | 默认 ProxySQL 端口 |
@@ -701,11 +695,8 @@ services:
 
 ### 4. 应用安全
 
-- 登录页内置暴力破解防护（基于用户名 + IP 限流）
 - 密码使用 bcrypt（后端）和 Fernet（ProxySQL 凭证）双重加密
-- CSRF 双提交 Cookie 模式保护
-- 审计日志记录所有配置变更操作
-- 会话过期策略：访问令牌 60 分钟 + 刷新令牌 7 天
+- 会话过期策略：访问令牌 480 分钟（8 小时）+ 刷新令牌 7 天
 
 ### 5. 定时安全审计
 

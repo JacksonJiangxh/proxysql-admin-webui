@@ -22,7 +22,6 @@ services:
       - SECRET_KEY=test-secret-key-for-integration-tests-min-32-chars!!
       - FERNET_KEY=${FERNET_KEY:-YOUR_FERNET_KEY_MUST_BE_SET}
       - ACCESS_TOKEN_EXPIRE_MINUTES=60
-      - CORS_ORIGINS=http://localhost:8080
       - LOG_LEVEL=DEBUG
       - PROXYSQL_DEFAULT_HOST=proxysql-mock
       - PROXYSQL_DEFAULT_PORT=6032

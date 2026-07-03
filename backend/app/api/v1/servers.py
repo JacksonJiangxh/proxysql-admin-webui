@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.database import get_db
 from app.models import ServerConfigCreate, ServerConfigUpdate, ServerConfig
 from app.utils.security import encrypt_credential, decrypt_credential
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 from app.services.proxysql import CONNECT_TIMEOUT
 
 router = APIRouter()
@@ -33,7 +33,7 @@ async def list_servers(user=Depends(get_current_user)):
 
 
 @router.post("", response_model=ServerConfig)
-async def create_server(data: ServerConfigCreate, user=Depends(require_role("admin"))):
+async def create_server(data: ServerConfigCreate, user=Depends(get_current_user)):
     """Add a new ProxySQL server instance."""
     db = await get_db()
     try:
@@ -87,7 +87,7 @@ async def get_server(server_id: str, user=Depends(get_current_user)):
 
 
 @router.put("/{server_id}", response_model=ServerConfig)
-async def update_server(server_id: str, data: ServerConfigUpdate, user=Depends(require_role("admin"))):
+async def update_server(server_id: str, data: ServerConfigUpdate, user=Depends(get_current_user)):
     """Update server configuration."""
     db = await get_db()
     try:
@@ -132,7 +132,7 @@ async def update_server(server_id: str, data: ServerConfigUpdate, user=Depends(r
 
 
 @router.delete("/{server_id}")
-async def delete_server(server_id: str, user=Depends(require_role("admin"))):
+async def delete_server(server_id: str, user=Depends(get_current_user)):
     """Delete a server."""
     db = await get_db()
     try:
@@ -146,7 +146,7 @@ async def delete_server(server_id: str, user=Depends(require_role("admin"))):
 
 
 @router.post("/{server_id}/test")
-async def test_connection(server_id: str, user=Depends(require_role("admin"))):
+async def test_connection(server_id: str, user=Depends(get_current_user)):
     """Test connection to a ProxySQL server."""
     db = await get_db()
     try:

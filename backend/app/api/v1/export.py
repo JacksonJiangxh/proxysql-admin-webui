@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Optional
 
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 from app.schemas.response import RESPONSE_AUTH, HTTPError
 from app.services.export_service import export_service
 from app.services.query_engine import query_engine
@@ -37,7 +37,7 @@ async def export_query_result(
         regex="^(csv|json)$",
         description="Export format: 'csv' or 'json'.",
     ),
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Execute a query and return results as a downloadable file."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)

@@ -63,7 +63,7 @@ cp .env.example .env
 docker compose up -d
 
 # 访问 http://localhost:8080
-# 默认登录：admin / admin
+# 默认登录：admin / admin123
 ```
 
 ### 裸机运行
@@ -96,8 +96,7 @@ make dev-frontend     # 终端2：前端 :5173 → http://localhost:5173
 | 🔍 **配置差异** | Disk / Memory / Runtime 三层差异可视化，行级对比 |
 | 🖥️ **多实例管理** | 管理多个 ProxySQL 服务器，连接测试，一键切换 |
 | 🌐 **集群管理** | ProxySQL 原生集群组管理，跨节点配置同步，状态监控 |
-| 🔐 **JWT 认证** | 多用户 + RBAC（Admin / Operator / Viewer） |
-| 📝 **审计日志** | 记录所有配置变更，按时间查询和清理 |
+| 🔐 **JWT 认证** | 多用户管理，Token 自动刷新 |
 | 🌍 **国际化** | 默认中文，内置英文，支持扩展更多语言 |
 | 🎨 **暗色主题** | 亮色/暗色模式切换，偏好持久化 |
 

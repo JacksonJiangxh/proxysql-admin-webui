@@ -52,7 +52,6 @@ tail -f /var/lib/proxysql/proxysql.log
 |---------|------|---------|
 | 应用日志 | `backend/logs/` | Docker: `docker compose logs` |
 | ProxySQL 日志 | `/var/lib/proxysql/proxysql.log` | `tail -f` 查看 |
-| 审计日志 | WebUI 系统设置页面 | 支持按时间查询和清理 |
 | systemd 日志 | journald | `journalctl -u proxysql-admin-webui` |
 
 ---
@@ -86,8 +85,7 @@ docker compose up -d
 **原因**：
 
 1. `SECRET_KEY` 变更：修改加密密钥会使现有 JWT Token 失效
-2. 账户被锁定：超过 5 次登录失败
-3. 数据库初始化问题
+2. 数据库初始化问题
 
 **解决方案**：
 

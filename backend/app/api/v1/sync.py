@@ -2,14 +2,10 @@
 
 Manages ProxySQL config lifecycle: check status, apply to runtime,
 save to disk, discard changes, load from disk.
-
-Cache invalidation: config diff cache is cleared after every mutating
-sync action (apply/save/discard/load) to prevent serving stale diffs.
-""" 
+"""
 from fastapi import APIRouter, Depends, Query
 
-from app.config import settings
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 from app.schemas.sync import SyncStatusResponse, SyncActionResult
 from app.schemas.response import RESPONSE_AUTH, RESPONSE_500, HTTPError
 from app.services.cache_service import cache_service
@@ -55,7 +51,7 @@ async def apply_config(
         default=None,
         description="Specific tables to apply. If omitted, all changed tables.",
     ),
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Apply configuration changes to runtime."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
@@ -63,8 +59,7 @@ async def apply_config(
         host, port, admin_user, password, SyncAction.APPLY, tables
     )
     # Invalidate config diff cache
-    if settings.CACHE_ENABLED:
-        cache_service.invalidate_config_diff(server_id)
+    cache_service.invalidate_config_diff(server_id)
     return result
 
 
@@ -86,15 +81,14 @@ async def save_config(
         default=None,
         description="Specific tables to save. If omitted, all tables.",
     ),
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Save configuration to disk."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
     result = await sync_service.sync_action(
         host, port, admin_user, password, SyncAction.SAVE, tables
     )
-    if settings.CACHE_ENABLED:
-        cache_service.invalidate_config_diff(server_id)
+    cache_service.invalidate_config_diff(server_id)
     return result
 
 
@@ -116,15 +110,14 @@ async def discard_changes(
         default=None,
         description="Specific tables to discard. If omitted, all changed tables.",
     ),
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Discard changes and reload from runtime."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
     result = await sync_service.sync_action(
         host, port, admin_user, password, SyncAction.DISCARD, tables
     )
-    if settings.CACHE_ENABLED:
-        cache_service.invalidate_config_diff(server_id)
+    cache_service.invalidate_config_diff(server_id)
     return result
 
 
@@ -146,13 +139,12 @@ async def load_from_disk(
         default=None,
         description="Specific tables to load. If omitted, all tables.",
     ),
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Load configuration from disk."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
     result = await sync_service.sync_action(
         host, port, admin_user, password, SyncAction.LOAD, tables
     )
-    if settings.CACHE_ENABLED:
-        cache_service.invalidate_config_diff(server_id)
+    cache_service.invalidate_config_diff(server_id)
     return result

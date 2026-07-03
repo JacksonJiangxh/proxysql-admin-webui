@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 from app.services.wizard_engine import WIZARD_REGISTRY
 from app.services.proxysql import proxysql_service
 from app.utils.db_helpers import get_proxysql_credentials
@@ -170,7 +170,7 @@ async def preview_wizard(data: WizardPreviewRequest, user=Depends(get_current_us
 @router.post("/execute")
 async def execute_wizard(
     data: WizardExecuteRequest,
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Execute a wizard operation."""
     wizard = WIZARD_REGISTRY.get(data.wizard_id)

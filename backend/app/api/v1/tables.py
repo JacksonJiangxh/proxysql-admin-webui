@@ -1,7 +1,7 @@
 """Table management API endpoints."""
 from fastapi import APIRouter, HTTPException, Depends, Query
 
-from app.middleware import get_current_user, require_role
+from app.middleware import get_current_user
 from app.services.proxysql import proxysql_service
 from app.services.schema_service import schema_service
 from app.utils.db_helpers import get_proxysql_credentials
@@ -301,7 +301,7 @@ async def insert_row(
     server_id: str,
     table_name: str,
     data: dict,
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Insert a row into a config table."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
@@ -330,7 +330,7 @@ async def update_row(
     table_name: str,
     pk_values: dict,
     data: dict,
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Update a row in a config table."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
@@ -360,7 +360,7 @@ async def delete_row(
     server_id: str,
     table_name: str,
     pk_values: dict,
-    user=Depends(require_role("admin", "operator")),
+    user=Depends(get_current_user),
 ):
     """Delete a row from a config table."""
     host, port, admin_user, password = await get_proxysql_credentials(server_id)
