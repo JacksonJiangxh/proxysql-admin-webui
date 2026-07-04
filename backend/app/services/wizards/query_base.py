@@ -38,6 +38,7 @@ class QueryWizard(BaseWizard):
         auto_save: bool = False,
     ) -> dict:
         """Execute the read-only queries and return collected results."""
+        fields = self._normalize_fields(fields)
         errors = self.validate(fields)
         if errors:
             return {"ok": False, "errors": errors}
@@ -70,6 +71,7 @@ class QueryWizard(BaseWizard):
 
     def preview_sql(self, fields: dict) -> dict:
         """Preview the queries that would be executed."""
+        fields = self._normalize_fields(fields)
         errors = self.validate(fields)
         if errors:
             return {"ok": False, "errors": errors}

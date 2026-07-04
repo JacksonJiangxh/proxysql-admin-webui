@@ -138,22 +138,31 @@ async def list_tables(
 
             if db == "main":
                 # Split main tables into memory / runtime / stats by prefix.
+                # NOTE: We intentionally do NOT set table_db for main-database
+                # tables — the frontend already knows that memory / runtime /
+                # stats layers always map to the "main" database via its
+                # built-in layer→database fallback in dbForTable().  Setting
+                # table_db here would be harmless for main-only tables, but it
+                # would be overwritten later when processing the "disk" database
+                # (which has the same table names), breaking runtime-layer
+                # queries (disk.runtime_<table> does not exist).
                 if name.startswith("runtime_"):
                     display = name[len("runtime_"):]
                     groups.setdefault("runtime", []).append(display)
-                    table_db[display] = "main"
                 elif name.startswith("stats_") or name.startswith("history_"):
                     groups.setdefault("stats", []).append(name)
-                    table_db[name] = "main"
                 else:
                     groups.setdefault("memory", []).append(name)
-                    table_db[name] = "main"
             elif db in _DB_DIRECT_LAYERS:
                 layer = _DB_DIRECT_LAYERS[db]
                 groups.setdefault(layer, []).append(name)
-                table_db[name] = db
+                # No table_db entry needed — the frontend's dbForTable()
+                # fallback already maps disk→"disk", monitor→"monitor",
+                # stats_history→"stats_history".
             else:
                 # Unknown database — show as its own group.
+                # Only here do we need a table_db entry, because the frontend
+                # has no built-in fallback for custom database names.
                 groups.setdefault(db, []).append(name)
                 table_db[name] = db
 

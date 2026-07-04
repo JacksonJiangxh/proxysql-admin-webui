@@ -238,7 +238,8 @@ class ProxySQLService:
         ]
         # Password is passed via environment variable, NOT as a command-line
         # argument, to prevent exposure in `ps` output.
-        env = {"MYSQL_PWD": str(password)}
+        import os
+        env = {**os.environ, "MYSQL_PWD": str(password)}
 
         try:
             proc = await asyncio.create_subprocess_exec(

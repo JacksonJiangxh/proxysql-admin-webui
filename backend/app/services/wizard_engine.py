@@ -19,6 +19,20 @@ from app.services.proxysql import proxysql_service
 from app.services.sync_service import sync_service, SyncAction
 
 
+def _safe_get(fields: dict, key: str, default: Any = ""):
+    """Get a field value with a default, handling None the same as missing.
+
+    Python's ``dict.get(key, default)`` only returns the default when the
+    key is completely absent from the dict; if the key is present with a
+    ``None`` value (e.g. JSON ``null`` from a frontend form), it returns
+    ``None``.  This helper treats ``None`` and missing keys the same way,
+    which prevents accidental SQL ``NULL`` for NOT NULL columns like
+    ``comment``.
+    """
+    val = fields.get(key)
+    return val if val is not None else default
+
+
 def _quote_val(v):
     """Safely quote/format a value for SQL embedding.
 
@@ -133,6 +147,19 @@ class BaseWizard(ABC):
         """Generate SQL statements from form fields."""
         ...
 
+    @staticmethod
+    def _normalize_fields(fields: dict) -> dict:
+        """Strip ``None`` values from the fields dict.
+
+        When the frontend sends ``"comment": null`` (JSON), Python
+        deserializes it as ``None``.  ``dict.get("key", default)`` then
+        returns ``None`` instead of the default because the key *exists*
+        (its value is just ``None``).  Stripping ``None``-valued keys
+        fixes this for every ``dict.get()`` call site at once, preventing
+        accidental SQL ``NULL`` for NOT NULL columns.
+        """
+        return {k: v for k, v in fields.items() if v is not None}
+
     async def execute(
         self,
         host: str, port: int, user: str, password: str,
@@ -141,6 +168,7 @@ class BaseWizard(ABC):
         auto_save: bool = False,
     ) -> dict:
         """Execute the wizard operation."""
+        fields = self._normalize_fields(fields)
         errors = self.validate(fields)
         if errors:
             return {"ok": False, "errors": errors}
@@ -172,22 +200,30 @@ class BaseWizard(ABC):
                 }
 
         # Auto Apply
+        auto_apply_error = None
         if auto_apply and self.definition.auto_apply_module:
-            await sync_service.sync_action(
-                host, port, user, password,
-                SyncAction.APPLY,
-                tables=[self.definition.target_table],
-            )
+            try:
+                await sync_service.sync_action(
+                    host, port, user, password,
+                    SyncAction.APPLY,
+                    tables=[self.definition.target_table],
+                )
+            except Exception as e:
+                auto_apply_error = str(e)
 
         # Auto Save
+        auto_save_error = None
         if auto_save and self.definition.auto_apply_module:
-            await sync_service.sync_action(
-                host, port, user, password,
-                SyncAction.SAVE,
-                tables=[self.definition.target_table],
-            )
+            try:
+                await sync_service.sync_action(
+                    host, port, user, password,
+                    SyncAction.SAVE,
+                    tables=[self.definition.target_table],
+                )
+            except Exception as e:
+                auto_save_error = str(e)
 
-        return {
+        response: dict = {
             "ok": True,
             "wizard_id": self.definition.id,
             "wizard_name": self.definition.name,
@@ -195,9 +231,15 @@ class BaseWizard(ABC):
             "results": results,
             "all_succeeded": all(r["ok"] for r in results),
         }
+        if auto_apply_error:
+            response["auto_apply_error"] = auto_apply_error
+        if auto_save_error:
+            response["auto_save_error"] = auto_save_error
+        return response
 
     def preview_sql(self, fields: dict) -> dict:
         """Preview the SQL that would be executed."""
+        fields = self._normalize_fields(fields)
         errors = self.validate(fields)
         if errors:
             return {"ok": False, "errors": errors}

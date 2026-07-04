@@ -165,6 +165,7 @@ class BackendConnectionTestWizard(BaseWizard):
         self, host: str, port: int, user: str, password: str,
         fields: dict, auto_apply: bool = False, auto_save: bool = False,
     ) -> dict:
+        fields = self._normalize_fields(fields)
         errors = self.validate(fields)
         if errors:
             return {"ok": False, "errors": errors}

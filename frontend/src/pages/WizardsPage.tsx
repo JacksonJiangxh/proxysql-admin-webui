@@ -158,7 +158,7 @@ export default function WizardsPage() {
     fieldList.forEach((f) => {
       // Skip lookup-type fields — they are UI helpers only, not part of the actual payload
       if (f.type === 'lookup') return
-      payload[f.name] = formValues[f.name] !== undefined ? formValues[f.name] : f.default
+      payload[f.name] = formValues[f.name] !== undefined ? formValues[f.name] : (f.default ?? '')
     })
     // Special-case the JSON textarea wizards (variables field)
     if (payload.variables && typeof payload.variables === 'string') {
