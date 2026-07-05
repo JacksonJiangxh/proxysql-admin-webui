@@ -148,3 +148,32 @@ async def load_from_disk(
     )
     cache_service.invalidate_config_diff(server_id)
     return result
+
+
+@router.post(
+    "/{server_id}/reconcile-mysql-users",
+    responses={
+        200: {"description": "mysql_users runtime reconciled successfully."},
+        500: {"description": "Reconcile failed.", "model": HTTPError},
+        **RESPONSE_AUTH,
+    },
+    summary="Reconcile mysql_users runtime",
+    description="Fix stuck mysql_users runtime entries by splitting "
+                "dual-purpose (frontend=1, backend=1) memory rows into "
+                "two rows with the same username (one with frontend=1, "
+                "one with backend=1), then applying to runtime. "
+                "This is a runtime-constraint workaround — it is NOT "
+                "a user-separation mechanism. ProxySQL always forwards "
+                "the client's username to the backend MySQL unchanged.",
+)
+async def reconcile_mysql_users(
+    server_id: str,
+    user=Depends(get_current_user),
+):
+    """Reconcile mysql_users configuration stuck in runtime."""
+    host, port, admin_user, password = await get_proxysql_credentials(server_id)
+    result = await sync_service.reconcile_mysql_users_runtime(
+        host, port, admin_user, password,
+    )
+    cache_service.invalidate_config_diff(server_id)
+    return result

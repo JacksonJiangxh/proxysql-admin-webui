@@ -993,8 +993,8 @@ WIZARD_REGISTRY: dict[str, BaseWizard] = {
     )),
     "W14": _planned("W14", "backend_users", "LDAP User Mapping",
                     "Configure LDAP user mapping (mysql_ldap_mapping)", "users", "mysql_ldap_mapping"),
-    "W15": _planned("W15", "backend_users", "Frontend/Backend User Separation",
-                    "Configure frontend-only or backend-only users", "user", "mysql_users"),
+    "W15": _planned("W15", "backend_users", "ProxySQL User Direction Control",
+                    "Control frontend/backend direction flags (NOT user mapping)", "user", "mysql_users"),
 
     # ── Query routing (W16-W23) ──
     "W16": ReadWriteSplitWizard(WizardDefinition(

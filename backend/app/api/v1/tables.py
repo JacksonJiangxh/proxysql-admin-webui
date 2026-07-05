@@ -225,21 +225,29 @@ async def get_table_data(
         full_table = f"{db}.{table_name}"
 
     # Validate both the database alias and table name.
+    # For the runtime layer we need to construct the full runtime-prefixed
+    # table name INSIDE the identifier quoting so that the resulting SQL is
+    # valid: `main`.`runtime_mysql_servers` instead of `main`.runtime_`mysql_servers`.
     try:
         safe_db = quote_ident(db)
         safe_table = quote_ident(table_name)
         if layer == "runtime":
-            safe_full = f"{safe_db}.runtime_{safe_table}"
+            runtime_table_name = f"runtime_{table_name}"
+            safe_full = f"{safe_db}.{quote_ident(runtime_table_name)}"
         else:
             safe_full = f"{safe_db}.{safe_table}"
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid table name: {e}")
 
     # Get columns via PRAGMA (always against the correct database).
+    # PRAGMA queries use unquoted identifiers because ProxySQL's SQLite
+    # engine does not accept backtick-quoted arguments in PRAGMA statements.
+    # For the runtime layer, the actual table name includes the "runtime_" prefix.
     try:
+        pragma_target = f"runtime_{table_name}" if layer == "runtime" else table_name
         columns_result = await proxysql_service.execute_query(
             host, port, admin_user, password,
-            f"PRAGMA {safe_db}.table_info({safe_full.split('.')[-1]})"
+            f"PRAGMA table_info({pragma_target})"
         )
     except Exception:
         columns_result = []

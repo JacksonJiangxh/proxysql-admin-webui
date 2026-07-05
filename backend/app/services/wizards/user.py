@@ -62,10 +62,38 @@ class LdapUserMappingWizard(BaseWizard):
 
 
 class FrontendBackendUserWizard(BaseWizard):
-    """W15: Configure frontend-only or backend-only users.
+    """W15: Control ProxySQL user direction (frontend / backend).
 
-    Creates a mysql_users entry with frontend=0 (backend-only) or
-    backend=0 (frontend-only), useful for split authentication setups.
+    ProxySQL's ``frontend`` and ``backend`` columns are **direction
+    flags** for a single user — they are NOT a username-mapping
+    mechanism.  The same username is always forwarded to the backend
+    MySQL when a client connects through ProxySQL.
+
+    Meaning of each flag:
+      frontend=1  → client CAN authenticate to ProxySQL as this user
+      backend=1   → ProxySQL CAN use this user to open backend
+                     connections to MySQL servers
+
+    IMPORTANT: A row with ``frontend=1, backend=0`` alone is
+    **non-functional** — the user can log into ProxySQL but cannot
+    execute any query because ProxySQL has no backend credential
+    for that username.
+
+    The ONLY valid "separation" scenario is creating TWO rows for
+    the SAME username (option ``split_directions``):
+
+        INSERT INTO mysql_users (... frontend=1, backend=0 ...)
+        INSERT INTO mysql_users (... frontend=0, backend=1 ...)
+
+    This allows independently toggling each direction without
+    deleting the user, while preserving normal query routing.
+
+    Options:
+      - ``both``: single row, frontend=1 backend=1 (standard user)
+      - ``backend_only``: single row, frontend=0 backend=1
+        (ProxySQL→MySQL pool user, clients cannot use this name)
+      - ``split_directions``: TWO rows for the same username
+        (frontend=1,backend=0 + frontend=0,backend=1)
     """
 
     def validate(self, fields: dict) -> list[str]:
@@ -75,34 +103,40 @@ class FrontendBackendUserWizard(BaseWizard):
         if not fields.get("password"):
             errors.append("password is required")
         user_type = fields.get("user_type", "both")
-        if user_type not in ("frontend_only", "backend_only", "both"):
-            errors.append("user_type must be frontend_only, backend_only, or both")
+        if user_type not in ("backend_only", "both", "split_directions"):
+            errors.append("user_type must be backend_only, both, or split_directions")
         return errors
 
     def generate_sql(self, fields: dict) -> list[str]:
         user_type = fields.get("user_type", "both")
-        if user_type == "frontend_only":
-            frontend, backend = 1, 0
-        elif user_type == "backend_only":
-            frontend, backend = 0, 1
-        else:
-            frontend, backend = 1, 1
 
         cols = ["username", "password", "active", "default_hostgroup",
                 "frontend", "backend", "max_connections", "comment"]
-        vals = [
-            fields["username"],
-            fields.get("password", ""),
-            int(fields.get("active", 1)),
-            int(fields.get("default_hostgroup", 0)),
-            frontend,
-            backend,
-            int(fields.get("max_connections", 10000)),
-            fields.get("comment", ""),
-        ]
-        cols_str = ", ".join(cols)
-        vals_str = ", ".join(_quote_val(v) for v in vals)
-        return [f"INSERT INTO mysql_users ({cols_str}) VALUES ({vals_str})"]
+
+        def _build_row(fe: int, be: int, extra_comment: str = "") -> str:
+            vals = [
+                fields["username"],
+                fields.get("password", ""),
+                int(fields.get("active", 1)),
+                int(fields.get("default_hostgroup", 0)),
+                fe,
+                be,
+                int(fields.get("max_connections", 10000)),
+                (fields.get("comment", "") + extra_comment).strip(),
+            ]
+            cols_str = ", ".join(cols)
+            vals_str = ", ".join(_quote_val(v) for v in vals)
+            return f"INSERT INTO mysql_users ({cols_str}) VALUES ({vals_str})"
+
+        if user_type == "backend_only":
+            return [_build_row(0, 1, " (backend-only)")]
+        elif user_type == "split_directions":
+            return [
+                _build_row(1, 0, " (frontend direction)"),
+                _build_row(0, 1, " (backend direction)"),
+            ]
+        else:  # both
+            return [_build_row(1, 1)]
 
 
 # ── Wizard Definitions ──────────────────────────────────────────
@@ -140,14 +174,35 @@ DEFINITIONS = {
     ), LdapUserMappingWizard),
 
     "W15": (WizardDefinition(
-        id="W15", category="backend_users", name="Frontend/Backend User Separation",
-        description="Configure frontend-only or backend-only users (mysql_users)",
+        id="W15", category="backend_users", name="ProxySQL User Direction Control",
+        description="Control frontend/backend direction flags for a mysql_users entry. "
+                    "NOT a username mapper — the same username is forwarded to backend MySQL.",
         icon="user", target_table="mysql_users", auto_apply_module="MYSQL USERS",
+        guide=(
+            "ProxySQL has two direction flags per user:\n"
+            "  • frontend=1 → clients can use this name to log into ProxySQL\n"
+            "  • backend=1  → ProxySQL can use this name to connect to backend MySQL\n\n"
+            "These are NOT a username-mapping mechanism. The same username\n"
+            "is always forwarded to the backend. To actually query data,\n"
+            "backend=1 must be set for some row with this username.\n\n"
+            "Options:\n"
+            "  • both (default): One row with frontend=1, backend=1.\n"
+            "    Standard user — works for most cases.\n"
+            "  • backend_only: One row with frontend=0, backend=1.\n"
+            "    Useful for pre-creating backend connection pools;\n"
+            "    clients cannot authenticate with this name.\n"
+            "  • split_directions: TWO rows for the same username:\n"
+            "    one (f=1,b=0) + one (f=0,b=1). Lets you toggle each\n"
+            "    direction independently without deleting the user.\n\n"
+            "IMPORTANT: The user must also exist on the backend MySQL\n"
+            "server with the same password — otherwise queries will\n"
+            "fail with access-denied errors."
+        ),
         fields=[
             WizardField("user_type", "User Type", "select", required=True, default="both",
-                        options=[{"value": "frontend_only", "label": "frontend_only"},
+                        options=[{"value": "both", "label": "both"},
                                  {"value": "backend_only", "label": "backend_only"},
-                                 {"value": "both", "label": "both"}]),
+                                 {"value": "split_directions", "label": "split_directions"}]),
             WizardField("username", "Username", "text", required=True),
             WizardField("password", "Password", "password", required=True),
             WizardField("default_hostgroup", "Default Hostgroup", "number", default=0),

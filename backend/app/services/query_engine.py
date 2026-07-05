@@ -88,10 +88,14 @@ class QueryEngine:
             # ProxySQL returns column "tables" (SELECT name AS tables FROM sqlite_master).
             table_name = table_info.get("tables") or table_info.get("name") or list(table_info.values())[0]
             try:
+                # table_name has been validated via quote_ident above (raised
+                # ValueError for unsafe names), so using it without backticks
+                # in PRAGMA is safe.  ProxySQL's SQLite engine does not accept
+                # backtick-quoted arguments in PRAGMA statements.
                 safe_table = quote_ident(table_name)
                 columns = await proxysql_service.execute_query(
                     host, port, user, password,
-                    f"PRAGMA table_info({safe_table})"
+                    f"PRAGMA table_info({table_name})"
                 )
                 schema["tables"].append({
                     "name": table_name,

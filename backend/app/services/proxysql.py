@@ -49,8 +49,10 @@ class ProxySQLService:
                 maxsize=POOL_MAX_SIZE,
                 pool_recycle=POOL_RECYCLE,
                 connect_timeout=CONNECT_TIMEOUT,
-                # charset: use utf8mb4 for full Unicode support
-                charset='utf8mb4',
+                # charset: use utf8 – ProxySQL's admin interface (SQLite-backed)
+                # does not support utf8mb4 negotiation; using it can cause
+                # queries to return empty results.
+                charset='utf8',
             )
         self._last_used[key] = asyncio.get_event_loop().time()
         return self._pools[key]

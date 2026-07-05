@@ -88,15 +88,32 @@ class CacheService:
         self._cache[key] = data
         logger.debug(f"Cache SET (dashboard, ttl={self._dashboard_ttl}s): {key}")
 
+    # Config diff keys use a structured prefix that includes the server_id
+    # as a plain-text namespace.  This allows *all* entries for a given server
+    # (including per-table snapshots) to be bulk-invalidated by scanning for a
+    # common prefix, regardless of how the remaining parameters differ.
+    _CONFIG_DIFF_NS = "cdiff"
+
+    def _config_diff_key(self, server_id: str, table: Optional[str]) -> str:
+        """Build a cache key whose prefix is ``cdiff:{server_id}:``.
+        
+        The server_id is embedded as plain text so that all keys for the same
+        server share an identical prefix, enabling reliable bulk invalidation.
+        """
+        payload = json.dumps({"table": table}, sort_keys=True, default=str)
+        digest = hashlib.sha256(payload.encode()).hexdigest()[:16]
+        return f"{self._CONFIG_DIFF_NS}:{server_id}:{digest}"
+
     def get_config_diff(
         self, server_id: str, table: Optional[str] = None
     ) -> Optional[dict]:
         """Retrieve a cached config diff if not expired."""
-        key = self._make_key("config_diff", server_id=server_id, table=table)
+        key = self._config_diff_key(server_id, table)
         value = self._cache.get(key)
         if value is not None:
             self._hits += 1
             logger.debug(f"Cache HIT: {key}")
+            # Return a shallow copy to prevent callers from mutating cached data
             return dict(value) if isinstance(value, dict) else value
         self._misses += 1
         logger.debug(f"Cache MISS: {key}")
@@ -106,7 +123,7 @@ class CacheService:
         self, server_id: str, table: Optional[str], data: dict
     ) -> None:
         """Store a config diff with medium TTL."""
-        key = self._make_key("config_diff", server_id=server_id, table=table)
+        key = self._config_diff_key(server_id, table)
         self._cache[key] = data
         logger.debug(f"Cache SET (config_diff, ttl={self._config_diff_ttl}s): {key}")
 
@@ -116,10 +133,14 @@ class CacheService:
         Called after sync operations (apply/save/discard/load) to ensure
         stale diffs are not served.
 
+        The key namespace ``cdiff:{server_id}:`` is used as the scan prefix,
+        which reliably matches every entry belonging to this server regardless
+        of which *table* was cached.
+
         Returns:
             Number of cache entries invalidated.
         """
-        prefix = self._make_key("config_diff", server_id=server_id, table=None)[:20]
+        prefix = f"{self._CONFIG_DIFF_NS}:{server_id}:"
         # Collect keys to avoid dict-size-changed-during-iteration
         keys_to_delete = [k for k in self._cache if k.startswith(prefix)]
         for k in keys_to_delete:
