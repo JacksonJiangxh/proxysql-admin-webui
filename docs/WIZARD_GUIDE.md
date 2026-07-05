@@ -500,18 +500,20 @@ VALUES (1, 'cn=db_users,dc=company,dc=com', 'app_user', 1, 'LDAP mapping for DB 
 
 ---
 
-#### W15 — 前端/后端用户分离
+#### W15 — ProxySQL 用户方向控制
 
 - **类别**：后端用户管理
-- **用途**：配置仅前端或仅后端的用户，用于分离认证
-- **何时使用**：需要实现前端认证与后端认证分离的场景
-- **前置条件**：理解 ProxySQL 前端/后端认证机制
+- **用途**：控制 `mysql_users` 条目的 `frontend`/`backend` 方向标记
+- **何时使用**：需要独立控制前端方向（客户端连接 ProxySQL）和后端方向（ProxySQL 连接 MySQL）的开关状态
+- **前置条件**：理解 ProxySQL 的 frontend/backend 是方向控制而非用户名映射。**同一用户名会原样转发到后端 MySQL，ProxySQL 不会做用户名转换。**
+
+> ⚠ **重要澄清**：`frontend=1, backend=0` 单独配置是**无效的**——用户能认证但无法执行任何查询。因为 ProxySQL 始终用客户端提供的用户名去连接后端 MySQL。如果后端 MySQL 上不存在该用户，查询会失败。
 
 **输入字段：**
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| user_type | select | 是 | both | Frontend Only / Backend Only / Both |
+| user_type | select | 是 | both | Both / Backend Only / Split Directions |
 | username | text | 是 | — | 用户名 |
 | password | password | 是 | — | 密码 |
 | default_hostgroup | number | 否 | 0 | 默认主机组 |
@@ -521,9 +523,19 @@ VALUES (1, 'cn=db_users,dc=company,dc=com', 'app_user', 1, 'LDAP mapping for DB 
 
 **生成 SQL 示例：**
 ```sql
--- Frontend-only user
+-- Both（标准用户，默认）：frontend=1 backend=1
 INSERT INTO mysql_users (username, password, active, default_hostgroup, frontend, backend, max_connections, comment)
-VALUES ('frontend_user', 'password', 1, 0, 1, 0, 10000, 'Frontend only')
+VALUES ('app_user', 'password', 1, 0, 1, 1, 10000, '')
+
+-- Backend Only（ProxySQL→MySQL 连接池，客户端不可见）
+INSERT INTO mysql_users (username, password, active, default_hostgroup, frontend, backend, max_connections, comment)
+VALUES ('app_user', 'password', 1, 0, 0, 1, 10000, 'backend-only')
+
+-- Split Directions（同一用户名拆两行，可独立开关）
+INSERT INTO mysql_users (username, password, active, default_hostgroup, frontend, backend, max_connections, comment)
+VALUES ('app_user', 'password', 1, 0, 1, 0, 10000, 'frontend direction')
+INSERT INTO mysql_users (username, password, active, default_hostgroup, frontend, backend, max_connections, comment)
+VALUES ('app_user', 'password', 1, 0, 0, 1, 10000, 'backend direction')
 ```
 
 **相关向导**：W09（创建用户）

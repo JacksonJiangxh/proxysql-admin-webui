@@ -165,9 +165,9 @@ export const zhCN: Record<string, string> = {
   'wizard.W14.name': 'LDAP 用户映射',
   'wizard.W14.desc': '配置 LDAP 用户到后端 MySQL 用户的映射关系（mysql_ldap_mapping），用于企业 LDAP 统一认证',
   'wizard.W14.guide': '如果你公司用 LDAP（如 OpenLDAP、Active Directory）管理员工账号，这个功能可以让 LDAP 用户直接通过 ProxySQL 访问 MySQL。\n\n工作原理：\n• 员工用 LDAP 账号连接 ProxySQL\n• ProxySQL 根据映射表，把 LDAP 身份转换成 MySQL 账号\n• 用对应的 MySQL 账号去连接后端数据库\n\n需要填写：LDAP 用户 → 对应的 MySQL 用户名映射。',
-  'wizard.W15.name': '前后端用户角色分离',
-  'wizard.W15.desc': '在 ProxySQL 中配置用户角色：仅前端认证（应用连接 ProxySQL）、仅后端认证（ProxySQL 连接 MySQL）、或双重认证',
-  'wizard.W15.guide': '控制一个 ProxySQL 用户的"双重身份"：\n\n• 仅前端：用户只能用来连接 ProxySQL（应用→ProxySQL 的认证），但不能用这个账号去连后端 MySQL。适合给应用一个专用连接账号\n• 仅后端：用户只能用来连后端 MySQL（ProxySQL→MySQL 的认证），不能直接连接 ProxySQL。适合存放后端数据库的真实密码\n• 双重认证（默认）：同一个账号既做前端认证又做后端认证\n\n为什么要分离？安全！你可以给应用一个简单密码（前端），而 ProxySQL 用另一个强密码连接 MySQL（后端），应用永远不知道 MySQL 的真实密码。',
+  'wizard.W15.name': 'ProxySQL 用户方向控制',
+  'wizard.W15.desc': '控制 mysql_users 条目的 frontend/backend 方向标记（非用户名映射——同一用户名总是原样转发到后端 MySQL）',
+  'wizard.W15.guide': '⚠ 重要澄清：frontend/backend 不是"用户名映射"机制！\nProxySQL 始终用客户端连接时的用户名去连接后端 MySQL，\n不会做用户名转换。\n\n每个用户有两个方向标记：\n  • frontend=1：客户端可以用这个用户名连接 ProxySQL\n  • backend=1：ProxySQL 可以用这个用户名连接后端 MySQL\n\n三个选项：\n\n1️⃣ 双重认证（默认）：一行记录，frontend=1, backend=1\n   标准配置，适合绝大多数场景。用户既可登录 ProxySQL，\n   也可连后端 MySQL。\n\n2️⃣ 仅后端：一行记录，frontend=0, backend=1\n   客户端不能用此名登录 ProxySQL，但 ProxySQL 可以预建\n   到后端 MySQL 的连接池。\n\n3️⃣ 方向拆分：两行记录，同一个用户名\n   一行 frontend=1,backend=0 + 一行 frontend=0,backend=1。\n   允许分别控制前后端方向开关，而不需要删除用户。\n   两行密码和属性必须一致。\n\n📌 安全提示：\n要真正保护后端 MySQL 密码不被泄露，正确做法是：\n  • 把用户名密码同时在 ProxySQL 和后端 MySQL 上都创建\n  • 用防火墙限制后端 MySQL 3306 端口只允许 ProxySQL 访问\n  • 应用只通过 ProxySQL 端口连接，永远不会接触 MySQL 地址\n  • ProxySQL 的 frontend/backend 无法实现"不同用户名"的隐藏',
 
   // 查询路由规则 (W16-W23)
   'wizard.W16.name': '读写分离快速配置',
@@ -454,9 +454,9 @@ export const zhCN: Record<string, string> = {
   'wizard.option.OFFLINE_SOFT': '优雅下线',
   'wizard.option.OFFLINE_HARD': '强制下线',
   // User Type 选项 (W15 select)
-  'wizard.option.frontend_only': '仅前端（应用→ProxySQL）',
   'wizard.option.backend_only': '仅后端（ProxySQL→MySQL）',
   'wizard.option.both': '双重认证（默认）',
+  'wizard.option.split_directions': '方向拆分（两行：前后端分开）',
   // Check Type 选项 (W16, W24 select)
   'wizard.option.read_only': 'read_only',
   'wizard.option.innodb_read_only': 'innodb_read_only',

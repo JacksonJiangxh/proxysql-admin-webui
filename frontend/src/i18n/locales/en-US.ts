@@ -161,9 +161,9 @@ export const enUS: Record<string, string> = {
   'wizard.W14.name': 'LDAP User Mapping',
   'wizard.W14.desc': 'Map LDAP frontend identities to backend MySQL users (mysql_ldap_mapping table) for enterprise LDAP authentication',
   'wizard.W14.guide': 'If your company uses LDAP (OpenLDAP, Active Directory) for user management, this feature lets LDAP users access MySQL through ProxySQL.\n\nHow it works:\n• Employee connects to ProxySQL with their LDAP credentials\n• ProxySQL looks up the mapping table and translates the LDAP identity to a MySQL user\n• Connects to the backend MySQL as that MySQL user\n\nFill in: LDAP user → corresponding MySQL username mapping.',
-  'wizard.W15.name': 'Frontend/Backend User Role Separation',
-  'wizard.W15.desc': 'Configure user role in ProxySQL: frontend-only (app→ProxySQL), backend-only (ProxySQL→MySQL), or both',
-  'wizard.W15.guide': 'Control the dual role of a ProxySQL user:\n\n• Frontend-only: User can only authenticate clients connecting to ProxySQL. Ideal for giving apps a dedicated connection account.\n• Backend-only: User can only be used by ProxySQL to connect to MySQL. Ideal for storing the real database password.\n• Both (default): Same account serves both frontend and backend authentication.\n\nWhy separate? Security! You can give your app a simple password (frontend) while ProxySQL uses a strong password to connect to MySQL (backend) — the app never knows the real MySQL password.',
+  'wizard.W15.name': 'ProxySQL User Direction Control',
+  'wizard.W15.desc': 'Control frontend/backend direction flags for mysql_users entries (NOT a username mapper — the same username is always forwarded to backend MySQL)',
+  'wizard.W15.guide': '⚠ Important: frontend/backend are NOT username-mapping flags!\nProxySQL always uses the connecting client\'s username when\nconnecting to backend MySQL — it never translates usernames.\n\nEach user record has two direction flags:\n  • frontend=1: clients CAN authenticate to ProxySQL as this user\n  • backend=1:  ProxySQL CAN use this user for backend connections\n\nThree options:\n\n1. Both (default): Single row, frontend=1 backend=1\n   Standard setup — works for almost all scenarios. User can\n   log into ProxySQL AND connect to backend MySQL.\n\n2. Backend Only: Single row, frontend=0 backend=1\n   Clients cannot use this name to log into ProxySQL, but\n   ProxySQL can pre-create backend connection pools.\n\n3. Split Directions: TWO rows for the SAME username\n   Row A: frontend=1, backend=0 + Row B: frontend=0, backend=1.\n   Lets you toggle each direction independently without\n   deleting the user. Both rows must have identical passwords.\n\n📌 Security note:\nTo truly protect your backend MySQL password from being leaked:\n  • Create the same username/password on both ProxySQL and MySQL\n  • Use a firewall to restrict MySQL port 3306 to ProxySQL only\n  • Apps connect only through ProxySQL, never directly to MySQL\n  • ProxySQL\'s frontend/backend flags cannot hide credentials\n    under a different username',
 
   // Query Routing (W16-W23)
   'wizard.W16.name': 'Read-Write Split Quick Setup',
@@ -449,9 +449,9 @@ export const enUS: Record<string, string> = {
   'wizard.option.OFFLINE_SOFT': 'Offline Soft',
   'wizard.option.OFFLINE_HARD': 'Offline Hard',
   // User Type options (W15 select)
-  'wizard.option.frontend_only': 'Frontend Only (App→ProxySQL)',
   'wizard.option.backend_only': 'Backend Only (ProxySQL→MySQL)',
   'wizard.option.both': 'Both (default)',
+  'wizard.option.split_directions': 'Split Directions (two rows: FE+BE separate)',
   // Check Type options (W16, W24 select)
   'wizard.option.read_only': 'read_only',
   'wizard.option.innodb_read_only': 'innodb_read_only',
