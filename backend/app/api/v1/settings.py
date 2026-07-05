@@ -10,6 +10,7 @@ from typing import Optional
 
 from app.database import get_db
 from app.middleware import get_current_user
+from app.version import get_version
 
 router = APIRouter()
 
@@ -68,7 +69,7 @@ async def get_system_info(user=Depends(get_current_user)):
         server_count = (await cursor.fetchone())["cnt"]
 
         return {
-            "version": "1.0.0",
+            "version": get_version(),
             "user_count": user_count,
             "server_count": server_count,
             "current_user": {

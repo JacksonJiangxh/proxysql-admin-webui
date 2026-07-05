@@ -1,5 +1,45 @@
-"""W25-W28: Replication & cluster topology configuration wizards."""
+"""W25-W28, W70: Replication & cluster topology configuration wizards."""
 from app.services.wizard_engine import BaseWizard, WizardDefinition, WizardField, _quote_val
+
+
+class DeleteReplicationHostgroupsWizard(BaseWizard):
+    """W70: Delete a replication/cluster hostgroup configuration.
+
+    Supports all replication hostgroup tables:
+    - mysql_replication_hostgroups (by writer_hostgroup + reader_hostgroup)
+    - mysql_group_replication_hostgroups (by writer_hostgroup)
+    - mysql_galera_hostgroups (by writer_hostgroup)
+    - mysql_aws_aurora_hostgroups (by writer_hostgroup)
+    - pgsql_replication_hostgroups (by writer_hostgroup + reader_hostgroup)
+    """
+
+    _VALID_TABLES = {
+        "mysql_replication_hostgroups",
+        "mysql_group_replication_hostgroups",
+        "mysql_galera_hostgroups",
+        "mysql_aws_aurora_hostgroups",
+        "pgsql_replication_hostgroups",
+    }
+
+    def validate(self, fields: dict) -> list[str]:
+        errors = []
+        target = fields.get("target_table")
+        if target not in self._VALID_TABLES:
+            errors.append(f"target_table must be one of: {', '.join(sorted(self._VALID_TABLES))}")
+        if fields.get("writer_hostgroup") is None:
+            errors.append("writer_hostgroup is required")
+        return errors
+
+    def generate_sql(self, fields: dict) -> list[str]:
+        target = fields["target_table"]
+        writer = int(fields["writer_hostgroup"])
+        reader = fields.get("reader_hostgroup")
+
+        where = f"writer_hostgroup = {writer}"
+        if reader is not None and target in ("mysql_replication_hostgroups", "pgsql_replication_hostgroups"):
+            where += f" AND reader_hostgroup = {int(reader)}"
+
+        return [f"DELETE FROM {target} WHERE {where}"]
 
 
 class GroupReplicationWizard(BaseWizard):
@@ -225,4 +265,36 @@ DEFINITIONS = {
             WizardField("comment", "Comment", "text", default="pgsql-replication"),
         ], status="implemented",
     ), PgsqlReplicationWizard),
+
+    "W70": (WizardDefinition(
+        id="W70", category="replication_topology", name="Delete Replication Cluster Config",
+        description="Remove a replication/cluster hostgroup configuration from ProxySQL",
+        icon="trash", target_table="mysql_replication_hostgroups", auto_apply_module="MYSQL SERVERS",
+        guide=(
+            "⚠ DANGER: This permanently removes the replication cluster\n"
+            "configuration from ProxySQL.\n\n"
+            "Select the target table type and identify the config by its\n"
+            "writer_hostgroup (and reader_hostgroup for some types).\n\n"
+            "After deletion:\n"
+            "  • Auto-read_only detection will stop for these hostgroups\n"
+            "  • Servers will remain in their current hostgroups\n"
+            "  • Read-write split rules may need to be updated separately (W69)\n\n"
+            "Before deleting, ensure no application traffic depends on\n"
+            "the automatic failover this configuration provides."
+        ),
+        fields=[
+            WizardField("target_table", "Replication Table", "select", required=True,
+                        options=[
+                            {"value": "mysql_replication_hostgroups", "label": "MySQL Replication"},
+                            {"value": "mysql_group_replication_hostgroups", "label": "Group Replication"},
+                            {"value": "mysql_galera_hostgroups", "label": "Galera Cluster"},
+                            {"value": "mysql_aws_aurora_hostgroups", "label": "AWS Aurora"},
+                            {"value": "pgsql_replication_hostgroups", "label": "PostgreSQL Replication"},
+                        ]),
+            WizardField("writer_hostgroup", "Writer Hostgroup", "number", required=True),
+            WizardField("reader_hostgroup", "Reader Hostgroup (for replication types)", "number"),
+            WizardField("confirm_delete", "I confirm I want to DELETE this cluster configuration",
+                        "checkbox", required=True, default=False),
+        ], status="implemented",
+    ), DeleteReplicationHostgroupsWizard),
 }

@@ -105,10 +105,10 @@ export const enUS: Record<string, string> = {
   'wizard.guideTitle': '📖 Beginner\'s Guide',
 
   // Wizard categories
-  'wizard.category.backend_servers': '🖥 Backend Servers (W01-W08)',
-  'wizard.category.backend_users': '👤 ProxySQL User Auth (W09-W15)',
-  'wizard.category.query_routing': '🔀 Query Routing (W16-W23)',
-  'wizard.category.replication_topology': '🌐 Replication & Cluster (W24-W28)',
+  'wizard.category.backend_servers': '🖥 Backend Servers (W01-W08, W64-W65)',
+  'wizard.category.backend_users': '👤 ProxySQL User Auth (W09-W15, W66-W68)',
+  'wizard.category.query_routing': '🔀 Query Routing (W16-W23, W69)',
+  'wizard.category.replication_topology': '🌐 Replication & Cluster (W24-W28, W70)',
   'wizard.category.system_config': '⚙ System Configuration (W29-W42)',
   'wizard.category.firewall_security': '🛡 Firewall & Security (W43-W45)',
   'wizard.category.operations': '🔄 Operations & Sync (W46-W52)',
@@ -320,6 +320,29 @@ export const enUS: Record<string, string> = {
   'wizard.W63.name': 'ProxySQL Cluster Status',
   'wizard.W63.desc': 'View ProxySQL native cluster node response times, config checksums, and online status',
   'wizard.W63.guide': 'If you have multiple ProxySQL instances in a cluster, view cluster health here.\n\nEach node shows:\n• Whether it is online\n• Response time\n• Config checksum (to check if configs are consistent)\n\nIf checksums don\'t match, some nodes haven\'t synced — sync manually.\n\nRead-only operation.',
+
+  // ── W64-W70: Data Deletion Wizards ──
+  'wizard.W64.name': 'Delete MySQL Backend Server',
+  'wizard.W64.desc': 'Permanently remove a MySQL backend server from the mysql_servers table',
+  'wizard.W64.guide': '⚠ DANGER: This will permanently remove the server from ProxySQL.\n\nAfter deletion:\n• ProxySQL stops forwarding all traffic to this server\n• Active connections are terminated immediately\n• Configuration is irrecoverable (unless backed up via W48)\n\nRecommended workflow:\n1. Use W05 to set OFFLINE_SOFT first and observe\n2. Use W08 to verify no active connections remain\n3. Delete only when you\'re sure the server is no longer needed',
+  'wizard.W65.name': 'Delete PostgreSQL Backend Server',
+  'wizard.W65.desc': 'Permanently remove a PostgreSQL backend server from the pgsql_servers table',
+  'wizard.W65.guide': '⚠ DANGER: This will permanently remove the PostgreSQL server from ProxySQL.\n\nPrecautions are similar to W64.',
+  'wizard.W66.name': 'Delete MySQL Backend User',
+  'wizard.W66.desc': 'Permanently remove a MySQL user record and associated LDAP mappings and fast routing entries',
+  'wizard.W66.guide': '⚠ DANGER: After deletion, applications can no longer authenticate through ProxySQL with this user.\n\nThis operation also cleans up:\n• LDAP mappings in mysql_ldap_mapping referencing this user\n• Fast routing entries in mysql_query_rules_fast_routing\n\nNOT deleted:\n• The actual MySQL user account on the backend server (handle separately)\n• Query routing rules referencing this user (use W69 separately)\n\nTIP: Use W13 to disable the user first, verify no impact, then delete.',
+  'wizard.W67.name': 'Delete PostgreSQL Backend User',
+  'wizard.W67.desc': 'Permanently remove a PostgreSQL user record from ProxySQL',
+  'wizard.W67.guide': '⚠ DANGER: After deletion, applications can no longer connect via ProxySQL with this PostgreSQL user.\n\nThe actual PostgreSQL role on the backend server is NOT deleted (handle separately).',
+  'wizard.W68.name': 'Delete LDAP User Mapping',
+  'wizard.W68.desc': 'Remove an LDAP user to MySQL backend mapping from mysql_ldap_mapping',
+  'wizard.W68.guide': '⚠ This removes the mapping relationship between an LDAP user and a MySQL user.\n\nThe actual LDAP account and MySQL user are NOT deleted — only the mapping is removed.',
+  'wizard.W69.name': 'Delete Query Routing Rule',
+  'wizard.W69.desc': 'Permanently remove a query routing rule from mysql_query_rules by rule_id',
+  'wizard.W69.guide': '⚠ DANGER: After deletion, queries that matched this rule will no longer be routed by it.\n\nIf you delete a critical rule (e.g., the SELECT rule in read-write split),\nqueries may be misrouted or fail.\n\nBefore deleting:\n1. Use W55 to check rule hit statistics\n2. Confirm no application traffic depends on this rule\n3. Plan a replacement rule if needed',
+  'wizard.W70.name': 'Delete Replication Cluster Config',
+  'wizard.W70.desc': 'Permanently remove a replication/cluster hostgroup configuration from ProxySQL',
+  'wizard.W70.guide': '⚠ DANGER: After deletion, ProxySQL stops automatic primary/replica detection for these hostgroups.\n\nSupported replication table types:\n• MySQL Replication (mysql_replication_hostgroups)\n• Group Replication (mysql_group_replication_hostgroups)\n• Galera Cluster (mysql_galera_hostgroups)\n• AWS Aurora (mysql_aws_aurora_hostgroups)\n• PostgreSQL Replication (pgsql_replication_hostgroups)\n\nAfter deletion:\n• Auto read_only detection stops\n• Servers remain in their hostgroups but won\'t auto-failover\n• Read-write split rules may need separate cleanup via W69\n\nSelect the replication table type and writer hostgroup to identify the config to delete.',
 
   // ── Wizard field label translations ──
   'wizard.field.hostgroup_id': 'Hostgroup',
@@ -858,7 +881,7 @@ export const enUS: Record<string, string> = {
   'tour.dashboard.title': 'Real-time Dashboard',
   'tour.dashboard.content': 'The dashboard shows key metrics: active connections, QPS, total queries, and more. Data is pushed in real-time via WebSocket — no manual refresh needed.',
   'tour.wizards.title': 'Configuration Wizards',
-  'tour.wizards.content': 'Configuration Wizards provide 63 guided forms covering backend servers, user authentication, query routing, firewall, monitoring, and more. No manual SQL required.',
+  'tour.wizards.content': 'Configuration Wizards provide 70 guided forms covering backend servers, user authentication, query routing, firewall, monitoring, and more. No manual SQL required.',
   'tour.search.title': 'Global Search',
   'tour.search.content': 'Press Ctrl+K (Mac: ⌘K) to open global search. Quickly find pages, configuration wizards, and common features. Just type a keyword to jump.',
 

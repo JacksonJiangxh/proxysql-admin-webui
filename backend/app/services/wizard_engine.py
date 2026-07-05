@@ -5,7 +5,7 @@ Each wizard encapsulates a specific ProxySQL operation, providing:
 - SQL generation from form fields
 - Execution with optional auto-apply/save
 
-The full technical catalog defines 63 wizards (W01-W63). This module
+The full technical catalog defines 70 wizards (W01-W70). This module
 implements the MVP subset documented in the technical specification's
 "优先级矩阵" P0 list plus several frequently-used P1 wizards. Wizards not
 yet implemented are exposed as ``status="planned"`` stubs so the UI can
@@ -294,11 +294,14 @@ from app.services.wizards import (  # noqa: E402
     SqlInjectionProtectionWizard,
     QueryCacheRuleWizard, QueryRewriteRuleWizard, QueryTimeoutRuleWizard,
     QueryMirrorRuleWizard, FastRoutingWizard, QueryLoggingRuleWizard,
+    DeleteQueryRuleWizard,
     GroupReplicationWizard, GaleraClusterWizard, AwsAuroraWizard,
-    PgsqlReplicationWizard,
+    PgsqlReplicationWizard, DeleteReplicationHostgroupsWizard,
     BatchImportServersWizard, ServerSslParamsWizard,
     HostgroupAttributesWizard, BackendConnectionTestWizard,
+    DeleteMysqlServerWizard, DeletePgsqlServerWizard,
     AddPgsqlUserWizard, LdapUserMappingWizard, FrontendBackendUserWizard,
+    DeleteMysqlUserWizard, DeletePgsqlUserWizard, DeleteLdapMappingWizard,
 )
 from app.services.wizards import (  # noqa: E402
     monitor as _monitor_mod,

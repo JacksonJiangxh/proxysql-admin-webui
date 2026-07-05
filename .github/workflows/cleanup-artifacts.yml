@@ -1,0 +1,190 @@
+name: Cleanup Old Artifacts
+
+on:
+  schedule:
+    # 每周日凌晨 3:00 UTC 自动运行
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+env:
+  KEEP_COUNT: 5                # 保留最新的 N 个版本
+  PACKAGE_NAME: proxysql-admin-webui
+
+jobs:
+  cleanup-releases:
+    name: Cleanup Old Releases
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Delete old GitHub Releases (keep git tags)
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          KEEP=${{ env.KEEP_COUNT }}
+          echo "📋 Keeping latest ${KEEP} releases, deleting older ones..."
+          echo "   (git tags preserved → sync-upstream won't re-push them)"
+          echo ""
+
+          # 获取所有非预发布、非草稿的 Release，按创建时间倒序
+          mapfile -t TAGS < <(gh release list --limit 100 \
+            --exclude-drafts --exclude-pre-releases \
+            --json tagName --jq '.[].tagName')
+
+          TOTAL=${#TAGS[@]}
+          COUNT=0
+          DELETED=0
+
+          for tag in "${TAGS[@]}"; do
+            COUNT=$((COUNT + 1))
+            if [ $COUNT -gt $KEEP ]; then
+              echo "🗑️  [$COUNT/${TOTAL}] Deleting release: ${tag}"
+              gh release delete "${tag}" --yes
+              DELETED=$((DELETED + 1))
+            else
+              echo "✅ [$COUNT/${TOTAL}] Keeping release: ${tag}"
+            fi
+          done
+
+          echo "deleted=${DELETED}" >> $GITHUB_OUTPUT
+          echo ""
+          echo "Done: deleted ${DELETED} old release(s), kept ${KEEP} newest"
+
+  cleanup-docker:
+    name: Cleanup Old Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Delete old Docker image versions from GHCR
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          KEEP: ${{ env.KEEP_COUNT }}
+          PACKAGE: ${{ env.PACKAGE_NAME }}
+        run: |
+          set -euo pipefail
+          KEEP="${KEEP:-5}"
+
+          # 获取所有 git tag，按 semver 倒序排列
+          mapfile -t ALL_TAGS < <(git tag --list 'v*' --sort=-version:refname)
+
+          # 确定要保留的版本号（去掉 v 前缀）
+          KEEP_VERSIONS=()
+          for ((i=0; i<KEEP && i<${#ALL_TAGS[@]}; i++)); do
+            KEEP_VERSIONS+=("${ALL_TAGS[$i]#v}")
+          done
+
+          echo "✅ Will keep Docker tags: ${KEEP_VERSIONS[*]}"
+          echo ""
+
+          # 计算要删除的版本号
+          DELETE_VERSIONS=()
+          for ((i=KEEP; i<${#ALL_TAGS[@]}; i++)); do
+            DELETE_VERSIONS+=("${ALL_TAGS[$i]#v}")
+          done
+
+          if [ ${#DELETE_VERSIONS[@]} -eq 0 ]; then
+            echo "ℹ️  No versions to delete"
+            echo "deleted=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "🎯 Candidates for deletion: ${DELETE_VERSIONS[*]}"
+          echo ""
+
+          # 从 GHCR 获取所有包版本
+          echo "📋 Fetching package versions from GHCR..."
+          VERSIONS_JSON=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/user/packages/container/${PACKAGE}/versions?per_page=100")
+
+          TOTAL_VERSIONS=$(echo "$VERSIONS_JSON" | jq '. | length')
+          echo "Found ${TOTAL_VERSIONS} package version(s)"
+          echo ""
+
+          # 构建保留版本的快速查找表
+          declare -A KEEP_MAP
+          for v in "${KEEP_VERSIONS[@]}"; do
+            KEEP_MAP["$v"]=1
+          done
+
+          DELETED=0
+
+          # 遍历每个版本，判断是否应该删除
+          while read -r version; do
+            VERSION_ID=$(echo "$version" | jq -r '.id')
+            VERSION_TAGS=$(echo "$version" | jq -r '[.metadata.container.tags[]] | join(",")' 2>/dev/null || echo "")
+
+            if [ -z "$VERSION_TAGS" ]; then
+              continue
+            fi
+
+            IFS=',' read -ra TAGS_ARRAY <<< "$VERSION_TAGS"
+
+            # 判断此版本是否应该保留
+            SHOULD_DELETE=true
+            for t in "${TAGS_ARRAY[@]}"; do
+              # 如果是浮动标签（latest / major / major.minor），保留
+              if [ "$t" = "latest" ]; then
+                SHOULD_DELETE=false
+                break
+              fi
+              # 如果匹配 ^N$ 或 ^N.N$（浮动标签），保留
+              if [[ "$t" =~ ^[0-9]+$ ]] || [[ "$t" =~ ^[0-9]+\.[0-9]+$ ]]; then
+                SHOULD_DELETE=false
+                break
+              fi
+              # 如果在保留列表中，保留
+              if [ "${KEEP_MAP[$t]:-0}" = "1" ]; then
+                SHOULD_DELETE=false
+                break
+              fi
+            done
+
+            if [ "$SHOULD_DELETE" = true ]; then
+              echo "🗑️  Deleting version ${VERSION_ID} (tags: ${VERSION_TAGS})"
+              gh api --method DELETE --silent \
+                -H "Accept: application/vnd.github+json" \
+                "/user/packages/container/${PACKAGE}/versions/${VERSION_ID}" || {
+                  echo "   ⚠️  Failed to delete version ${VERSION_ID}, skipping"
+                  continue
+                }
+              DELETED=$((DELETED + 1))
+            else
+              echo "✅ Keeping version ${VERSION_ID} (tags: ${VERSION_TAGS})"
+            fi
+          done < <(echo "$VERSIONS_JSON" | jq -c '.[]')
+
+          echo "deleted=${DELETED}" >> $GITHUB_OUTPUT
+          echo ""
+          echo "Done: deleted ${DELETED} old Docker version(s)"
+
+  summary:
+    name: Summary
+    needs: [cleanup-releases, cleanup-docker]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print summary
+        run: |
+          echo "## 🧹 Artifact Cleanup Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Old Releases | ${{ needs.cleanup-releases.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Old Docker Images | ${{ needs.cleanup-docker.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Note**: git tags are preserved to prevent sync-upstream from re-pushing deleted releases."

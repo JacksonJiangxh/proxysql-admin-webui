@@ -1,5 +1,18 @@
-"""W18-W23: Query routing rule wizards (mysql_query_rules variants)."""
+"""W18-W23, W69: Query routing rule wizards (mysql_query_rules variants)."""
 from app.services.wizard_engine import BaseWizard, WizardDefinition, WizardField, _quote_val
+
+
+class DeleteQueryRuleWizard(BaseWizard):
+    """W69: Delete a query routing rule from mysql_query_rules by rule_id."""
+
+    def validate(self, fields: dict) -> list[str]:
+        errors = []
+        if fields.get("rule_id") is None:
+            errors.append("rule_id is required to identify the rule")
+        return errors
+
+    def generate_sql(self, fields: dict) -> list[str]:
+        return [f"DELETE FROM mysql_query_rules WHERE rule_id = {int(fields['rule_id'])}"]
 
 
 def _build_rule_insert(fields: dict, extra_cols: list, extra_vals: list) -> str:
@@ -343,4 +356,32 @@ DEFINITIONS = {
             WizardField("comment", "Comment", "text"),
         ], status="implemented",
     ), QueryLoggingRuleWizard),
+
+    "W69": (WizardDefinition(
+        id="W69", category="query_routing", name="Delete Query Routing Rule",
+        description="Remove a query routing rule from mysql_query_rules by rule_id",
+        icon="trash", target_table="mysql_query_rules", auto_apply_module="MYSQL QUERY RULES",
+        guide=(
+            "⚠ DANGER: This permanently removes the query rule from ProxySQL.\n"
+            "The rule identified by rule_id will be deleted from mysql_query_rules.\n\n"
+            "Before deleting:\n"
+            "1. Use W55 (Query Rule Hit Statistics) to confirm the rule is unused\n"
+            "2. Verify no traffic depends on this rule for routing\n"
+            "3. Deleting a rule that was handling critical traffic (e.g. read-write\n"
+            "   split) may cause queries to be routed incorrectly"
+        ),
+        fields=[
+            WizardField("_lookup", "Select Rule to Delete (auto-fill)", "lookup",
+                        lookup={
+                            "table": "mysql_query_rules",
+                            "label_template": "rule_id={rule_id} | {match_digest} | hg={destination_hostgroup}",
+                            "linked_fields": {
+                                "rule_id": "rule_id",
+                            },
+                        }),
+            WizardField("rule_id", "Rule ID", "number", required=True),
+            WizardField("confirm_delete", "I confirm I want to DELETE this rule",
+                        "checkbox", required=True, default=False),
+        ], status="implemented",
+    ), DeleteQueryRuleWizard),
 }

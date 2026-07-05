@@ -108,10 +108,10 @@ export const zhCN: Record<string, string> = {
   'wizard.guideTitle': '📖 小白说明',
 
   // 向导分类
-  'wizard.category.backend_servers': '🖥 后端服务器管理 (W01-W08)',
-  'wizard.category.backend_users': '👤 ProxySQL 用户认证管理 (W09-W15)',
-  'wizard.category.query_routing': '🔀 查询路由规则 (W16-W23)',
-  'wizard.category.replication_topology': '🌐 复制与集群拓扑 (W24-W28)',
+  'wizard.category.backend_servers': '🖥 后端服务器管理 (W01-W08, W64-W65)',
+  'wizard.category.backend_users': '👤 ProxySQL 用户认证管理 (W09-W15, W66-W68)',
+  'wizard.category.query_routing': '🔀 查询路由规则 (W16-W23, W69)',
+  'wizard.category.replication_topology': '🌐 复制与集群拓扑 (W24-W28, W70)',
   'wizard.category.system_config': '⚙ 系统配置 (W29-W42)',
   'wizard.category.firewall_security': '🛡 防火墙与安全 (W43-W45)',
   'wizard.category.operations': '🔄 运维与配置同步 (W46-W52)',
@@ -324,6 +324,29 @@ export const zhCN: Record<string, string> = {
   'wizard.W63.name': 'ProxySQL 集群状态',
   'wizard.W63.desc': '查看 ProxySQL 原生集群各节点的响应时间、配置校验和及在线状态',
   'wizard.W63.guide': '如果你配置了多台 ProxySQL 组成集群，这里可以看集群健康状态。\n\n每个节点显示：\n• 是否在线\n• 响应时间\n• 配置校验和（判断配置是否一致）\n\n如果配置校验和不一致，说明有节点的配置没同步，需要手动同步。\n\n只读操作。',
+
+  // ── W64-W70: 数据删除向导 ──
+  'wizard.W64.name': '删除 MySQL 后端服务器',
+  'wizard.W64.desc': '从 ProxySQL 的 mysql_servers 表中永久删除一台 MySQL 后端服务器',
+  'wizard.W64.guide': '⚠ 危险操作：这会把服务器从 ProxySQL 中彻底移除。\n\n删除后：\n• ProxySQL 不再向该服务器转发任何流量\n• 当前连接会被立即断开\n• 该服务器的配置无法恢复（除非之前用 W48 备份过）\n\n建议操作：\n1. 先从 W05 设置为 OFFLINE_SOFT 观察一段时间\n2. 使用 W08 确认该服务器无活跃连接\n3. 确认不再需要后才执行删除\n\n填主机组、主机地址、端口来指定要删除的服务器。',
+  'wizard.W65.name': '删除 PostgreSQL 后端服务器',
+  'wizard.W65.desc': '从 ProxySQL 的 pgsql_servers 表中永久删除一台 PostgreSQL 后端服务器',
+  'wizard.W65.guide': '⚠ 危险操作：这会把 PostgreSQL 服务器从 ProxySQL 中彻底移除。\n\n注意事项与 W64 类似。\n\n填主机组、主机地址、端口来指定要删除的服务器。',
+  'wizard.W66.name': '删除 MySQL 后端用户',
+  'wizard.W66.desc': '从 ProxySQL 永久删除 MySQL 用户记录及关联的 LDAP 映射和快速路由条目',
+  'wizard.W66.guide': '⚠ 危险操作：删除用户后，前端应用将无法通过 ProxySQL 连接后端数据库。\n\n此操作会同时清理：\n• mysql_users 表中的用户记录\n• mysql_ldap_mapping 中关联的 LDAP 映射\n• mysql_query_rules_fast_routing 中关联的快速路由\n\n不会删除：\n• 后端 MySQL 服务器上实际的用户账号（需单独处理）\n• 引用该用户的查询路由规则（需用 W69 单独删除）\n\n建议：先用 W13 禁用用户，确认无影响后再执行删除。',
+  'wizard.W67.name': '删除 PostgreSQL 后端用户',
+  'wizard.W67.desc': '从 ProxySQL 永久删除 PostgreSQL 用户记录',
+  'wizard.W67.guide': '⚠ 危险操作：删除用户后，前端应用将无法通过 ProxySQL 连接后端 PostgreSQL 数据库。\n\n不会删除后端 PostgreSQL 服务器上实际的用户（需单独处理）。\n\n填写要删除的用户名即可。',
+  'wizard.W68.name': '删除 LDAP 用户映射',
+  'wizard.W68.desc': '删除 LDAP 用户到 MySQL 后端的映射关系（mysql_ldap_mapping）',
+  'wizard.W68.guide': '⚠ 这会移除 LDAP 用户与 MySQL 用户之间的映射关系。\n\n实际的 LDAP 账号和 MySQL 用户不会被删除，只是映射关系被移除。\n建议先用 W14 查看现有映射，确认后再执行删除。',
+  'wizard.W69.name': '删除查询路由规则',
+  'wizard.W69.desc': '从 mysql_query_rules 表中按 rule_id 永久删除一条查询路由规则',
+  'wizard.W69.guide': '⚠ 危险操作：删除路由规则后，原本匹配该规则的查询将不再被路由。\n\n如果删除的是关键规则（如读写分离中的 SELECT 路由规则），\n查询可能被默认路由或直接失败。\n\n建议：\n1. 先用 W55 查看规则命中统计，确认规则未被使用\n2. 删除前确认没有应用流量依赖此规则\n3. 规划好替代规则后再执行删除\n\n按规则 ID（rule_id）来指定要删除的规则。',
+  'wizard.W70.name': '删除复制集群配置',
+  'wizard.W70.desc': '从 ProxySQL 中永久删除复制/集群主机组配置',
+  'wizard.W70.guide': '⚠ 危险操作：删除集群配置后，ProxySQL 停止对该集群的自动主从检测。\n\n支持的复制表类型：\n• MySQL 主从复制（mysql_replication_hostgroups）\n• Group Replication（mysql_group_replication_hostgroups）\n• Galera 集群（mysql_galera_hostgroups）\n• AWS Aurora（mysql_aws_aurora_hostgroups）\n• PostgreSQL 复制（pgsql_replication_hostgroups）\n\n删除后：\n• 自动 read_only 检测停止\n• 服务器仍保留在各自的主机组中，但不会自动切换\n• 读写分离规则可能需要用 W69 单独清理\n\n请先选择复制表类型，再填写入主机组来定位要删除的配置。',
 
   // ── Wizard 字段标签翻译 ──
   // 通用字段
@@ -863,7 +886,7 @@ export const zhCN: Record<string, string> = {
   'tour.dashboard.title': '实时监控仪表盘',
   'tour.dashboard.content': '首页仪表盘展示关键指标：活跃连接数、QPS、总查询量等。数据通过 WebSocket 实时推送，无需手动刷新。',
   'tour.wizards.title': '配置向导',
-  'tour.wizards.content': '配置向导提供 63 个引导式表单，覆盖后端服务器、用户认证、查询路由、防火墙、监控等全套 ProxySQL 配置。无需手动编写 SQL。',
+  'tour.wizards.content': '配置向导提供 70 个引导式表单，覆盖后端服务器、用户认证、查询路由、防火墙、监控等全套 ProxySQL 配置。无需手动编写 SQL。',
   'tour.search.title': '全局搜索',
   'tour.search.content': '按 Ctrl+K（Mac: ⌘K）打开全局搜索，可以快速搜索页面、配置向导和常用功能。输入关键词即可跳转。',
 

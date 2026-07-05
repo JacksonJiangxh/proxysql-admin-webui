@@ -252,8 +252,8 @@ async def test_wizards_definitions_endpoint(setup_db):
         assert resp.status_code == 200
         data = resp.json()
         assert "wizards" in data
-        # The technical documentation catalog defines 63 wizards.
-        assert len(data["wizards"]) == 63
+        # The technical documentation catalog defines 70 wizards.
+        assert len(data["wizards"]) == 70
         # Each definition must carry a status field so the frontend can tell
         # implemented wizards apart from planned stubs.
         statuses = {w["status"] for w in data["wizards"]}

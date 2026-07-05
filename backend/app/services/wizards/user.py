@@ -1,5 +1,55 @@
-"""W10, W14-W15: Backend user management wizards."""
+"""W10, W14-W15, W66-W68: Backend user management wizards."""
 from app.services.wizard_engine import BaseWizard, WizardDefinition, WizardField, _quote_val
+
+
+class DeleteMysqlUserWizard(BaseWizard):
+    """W66: Delete a MySQL backend user from mysql_users by username."""
+
+    def validate(self, fields: dict) -> list[str]:
+        errors = []
+        if not fields.get("username"):
+            errors.append("username is required to identify the user")
+        return errors
+
+    def generate_sql(self, fields: dict) -> list[str]:
+        username = _quote_val(fields["username"])
+        sqls = [f"DELETE FROM mysql_users WHERE username = {username}"]
+        # Also clean up LDAP mappings referencing this user
+        sqls.append(f"DELETE FROM mysql_ldap_mapping WHERE backend_entity = {username}")
+        # Also clean up fast routing entries
+        sqls.append(f"DELETE FROM mysql_query_rules_fast_routing WHERE username = {username}")
+        return sqls
+
+
+class DeletePgsqlUserWizard(BaseWizard):
+    """W67: Delete a PostgreSQL backend user from pgsql_users by username."""
+
+    def validate(self, fields: dict) -> list[str]:
+        errors = []
+        if not fields.get("username"):
+            errors.append("username is required to identify the user")
+        return errors
+
+    def generate_sql(self, fields: dict) -> list[str]:
+        return [f"DELETE FROM pgsql_users WHERE username = {_quote_val(fields['username'])}"]
+
+
+class DeleteLdapMappingWizard(BaseWizard):
+    """W68: Delete an LDAP user mapping entry from mysql_ldap_mapping."""
+
+    def validate(self, fields: dict) -> list[str]:
+        errors = []
+        if fields.get("priority") is None:
+            errors.append("priority is required to identify the mapping")
+        if not fields.get("frontend_entity"):
+            errors.append("frontend_entity is required to identify the mapping")
+        return errors
+
+    def generate_sql(self, fields: dict) -> list[str]:
+        where = (f"priority = {int(fields['priority'])} "
+                 f"AND frontend_entity = {_quote_val(fields['frontend_entity'])} "
+                 f"AND backend_entity = {_quote_val(fields.get('backend_entity', ''))}")
+        return [f"DELETE FROM mysql_ldap_mapping WHERE {where}"]
 
 
 class AddPgsqlUserWizard(BaseWizard):
@@ -211,4 +261,84 @@ DEFINITIONS = {
             WizardField("comment", "Comment", "text"),
         ], status="implemented",
     ), FrontendBackendUserWizard),
+
+    "W66": (WizardDefinition(
+        id="W66", category="backend_users", name="Delete MySQL Backend User",
+        description="Remove a MySQL backend user and associated records from ProxySQL",
+        icon="trash", target_table="mysql_users", auto_apply_module="MYSQL USERS",
+        guide=(
+            "⚠ DANGER: This permanently removes the user from ProxySQL.\n"
+            "The wizard will also clean up associated LDAP mappings and\n"
+            "fast routing entries that reference this user.\n\n"
+            "Before deleting:\n"
+            "1. Consider using W13 to disable the user first\n"
+            "2. Verify no active frontend connections exist (W59)\n"
+            "3. Ensure this user is no longer referenced by query rules\n"
+            "4. The backend MySQL user will NOT be deleted — you must\n"
+            "   also clean up the user on the actual MySQL server"
+        ),
+        fields=[
+            WizardField("_lookup", "Select User to Delete (auto-fill)", "lookup",
+                        lookup={
+                            "table": "mysql_users",
+                            "label_template": "{username} | hg={default_hostgroup} | active={active}",
+                            "linked_fields": {"username": "username"},
+                        }),
+            WizardField("username", "Username", "text", required=True),
+            WizardField("confirm_delete", "I confirm I want to DELETE this user and all associated records",
+                        "checkbox", required=True, default=False),
+        ], status="implemented",
+    ), DeleteMysqlUserWizard),
+
+    "W67": (WizardDefinition(
+        id="W67", category="backend_users", name="Delete PostgreSQL Backend User",
+        description="Remove a PostgreSQL backend user from ProxySQL",
+        icon="trash", target_table="pgsql_users", auto_apply_module="PGSQL USERS",
+        guide=(
+            "⚠ DANGER: This permanently removes the user from ProxySQL.\n"
+            "The PostgreSQL user on the actual server will NOT be deleted\n"
+            "— you must clean that up separately.\n\n"
+            "Before deleting, verify no active connections rely on this user."
+        ),
+        fields=[
+            WizardField("_lookup", "Select User to Delete (auto-fill)", "lookup",
+                        lookup={
+                            "table": "pgsql_users",
+                            "label_template": "{username} | hg={default_hostgroup} | active={active}",
+                            "linked_fields": {"username": "username"},
+                        }),
+            WizardField("username", "Username", "text", required=True),
+            WizardField("confirm_delete", "I confirm I want to DELETE this user",
+                        "checkbox", required=True, default=False),
+        ], status="implemented",
+    ), DeletePgsqlUserWizard),
+
+    "W68": (WizardDefinition(
+        id="W68", category="backend_users", name="Delete LDAP User Mapping",
+        description="Remove an LDAP user mapping entry from mysql_ldap_mapping",
+        icon="trash", target_table="mysql_ldap_mapping", auto_apply_module="MYSQL USERS",
+        guide=(
+            "⚠ This removes the LDAP-to-MySQL user mapping.\n"
+            "The actual LDAP user and MySQL user will NOT be affected\n"
+            "— only the mapping relationship is deleted.\n\n"
+            "Identify the mapping by priority + frontend_entity + backend_entity."
+        ),
+        fields=[
+            WizardField("_lookup", "Select Mapping to Delete (auto-fill)", "lookup",
+                        lookup={
+                            "table": "mysql_ldap_mapping",
+                            "label_template": "pri={priority} | {frontend_entity} → {backend_entity}",
+                            "linked_fields": {
+                                "priority": "priority",
+                                "frontend_entity": "frontend_entity",
+                                "backend_entity": "backend_entity",
+                            },
+                        }),
+            WizardField("priority", "Priority", "number", required=True),
+            WizardField("frontend_entity", "Frontend Entity", "text", required=True),
+            WizardField("backend_entity", "Backend Entity", "text", required=True),
+            WizardField("confirm_delete", "I confirm I want to DELETE this mapping",
+                        "checkbox", required=True, default=False),
+        ], status="implemented",
+    ), DeleteLdapMappingWizard),
 }

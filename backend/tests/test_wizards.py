@@ -21,10 +21,10 @@ from app.services.wizard_engine import (
 )
 
 
-# Total wizard count expected from the technical documentation (W01-W63).
-EXPECTED_TOTAL_WIZARDS = 63
-# All 63 wizards (W01-W63) are now fully implemented.
-IMPLEMENTED_WIZARDS = {f"W{i:02d}" for i in range(1, 64)}
+# Total wizard count (W01-W70): 63 original + 7 delete wizards (W64-W70).
+EXPECTED_TOTAL_WIZARDS = 70
+# All 70 wizards (W01-W70) are now fully implemented.
+IMPLEMENTED_WIZARDS = {f"W{i:02d}" for i in range(1, 71)}
 # Wizards that legitimately need no user input (read-only or no-param wizards).
 NO_FIELD_WIZARDS = {
     "W50", "W51", "W52",           # ops: load-from-disk, reset-stats, flush-cache
@@ -347,10 +347,8 @@ def test_wizard_preview():
     assert result["auto_apply_sql"] is not None
 
 
-def test_all_63_wizards_registered():
-    """All 63 wizards from the technical documentation must be registered,
-    even if only a subset is implemented. Planned wizards appear as stubs so
-    the UI can advertise the full roadmap."""
+def test_all_wizards_registered():
+    """All 70 wizards (W01-W70) must be registered in the registry."""
     assert len(WIZARD_REGISTRY) == EXPECTED_TOTAL_WIZARDS
     for i in range(1, EXPECTED_TOTAL_WIZARDS + 1):
         wiz_id = f"W{i:02d}"
@@ -377,7 +375,7 @@ def test_implemented_status_matches_registry():
 
 
 def test_no_planned_wizards_remain():
-    """All 63 wizards should now be implemented (no planned stubs left)."""
+    """All 70 wizards should now be implemented (no planned stubs left)."""
     planned = [wid for wid, w in WIZARD_REGISTRY.items() if w.definition.status == "planned"]
     assert planned == [], f"Unexpected planned wizards: {planned}"
 

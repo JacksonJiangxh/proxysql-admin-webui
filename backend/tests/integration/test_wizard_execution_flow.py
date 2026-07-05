@@ -12,14 +12,14 @@ from app.main import app
 
 @pytest.mark.asyncio
 async def test_wizard_definitions_listing(setup_db, test_app, admin_token):
-    """Test that all 63 wizard definitions are returned."""
+    """Test that all 70 wizard definitions are returned."""
     resp = await test_app.get("/api/v1/wizards/definitions", headers={
         "Authorization": f"Bearer {admin_token}"
     })
     assert resp.status_code == 200
     data = resp.json()
     assert "wizards" in data
-    assert len(data["wizards"]) == 63
+    assert len(data["wizards"]) == 70
 
     # Check structure of each wizard
     for wiz in data["wizards"]:

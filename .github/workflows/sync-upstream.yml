@@ -1,4 +1,4 @@
-name: Sync Upstream
+name: Sync Upstream (Mirror)
 
 on:
   schedule:
@@ -10,11 +10,10 @@ env:
 
 jobs:
   sync:
-    name: Sync from Upstream
+    name: Mirror from Upstream
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
       actions: write
 
     steps:
@@ -22,8 +21,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          # 必须用 PAT 而非 GITHUB_TOKEN：
-          # GITHUB_TOKEN 推送的 tag 不会触发其他 workflow（如 release-binaries）
           token: ${{ secrets.PAT_TOKEN }}
 
       - name: Configure Git
@@ -35,9 +32,7 @@ jobs:
         run: |
           git remote add upstream ${{ env.UPSTREAM_URL }} || \
             git remote set-url upstream ${{ env.UPSTREAM_URL }}
-          # 拉取 main 分支代码（不含 tag 是因为后面 --tags 更完整）
           git fetch upstream main
-          # 拉取全部 tag，--force 确保覆盖本地已有轻量 tag 为带注释 tag
           git fetch upstream --tags --force
 
       - name: Sync tags from upstream → origin
@@ -47,24 +42,20 @@ jobs:
           NEW_COUNT=0
           NEW_TAGS=""
 
-          # 获取 origin（GitHub）已有的 tag 列表，用于精确对比
           ORIGIN_TAGS=$(git ls-remote --tags origin \
             | grep -v '\^{}' \
             | awk '{print $2}' \
             | sed 's|refs/tags/||')
 
-          # 获取 upstream 所有 tag（过滤 dereference 后缀 ^{}）
           UPSTREAM_TAGS=$(git ls-remote --tags upstream \
             | grep -v '\^{}' \
             | awk '{print $2}' \
             | sed 's|refs/tags/||')
 
           for tag in $UPSTREAM_TAGS; do
-            # 检测 origin 远端是否已有此 tag（而非本地）
             if echo "$ORIGIN_TAGS" | grep -qxF "${tag}"; then
               echo "  ⏭️  Already on origin: ${tag}"
             else
-              # 获取 tag 对应的 commit sha
               TAG_SHA=$(git ls-remote --tags upstream "refs/tags/${tag}" \
                 | grep -v '\^{}' \
                 | awk '{print $1}')
@@ -72,7 +63,6 @@ jobs:
                 echo "  ⚠️  Skipping ${tag}: could not resolve commit"
                 continue
               fi
-              # 如果 commit 不在本地，fetch 它
               if ! git cat-file -e "${TAG_SHA}" 2>/dev/null; then
                 git fetch upstream "${TAG_SHA}"
               fi
@@ -92,40 +82,29 @@ jobs:
             echo "ℹ️  No new tags to sync"
           fi
 
-      - name: Check for source changes
-        id: check
+      - name: Sync source code (mirror push)
+        id: source
         run: |
           UPSTREAM_SHA=$(git rev-parse upstream/main)
           ORIGIN_SHA=$(git rev-parse origin/main)
+
           echo "upstream_sha=$UPSTREAM_SHA" >> $GITHUB_OUTPUT
           echo "origin_sha=$ORIGIN_SHA" >> $GITHUB_OUTPUT
+
           if [ "$UPSTREAM_SHA" != "$ORIGIN_SHA" ]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "Upstream has new changes"
+            echo "📥 Source changed, mirroring..."
+            echo "   Upstream: $UPSTREAM_SHA"
+            echo "   Origin:   $ORIGIN_SHA"
+            # 直接将 upstream/main 推送到 origin/main（镜像同步）
+            # 先尝试 fast-forward push，失败则 force（纯镜像场景下可接受）
+            git push origin "upstream/main:refs/heads/main" || \
+              git push origin "upstream/main:refs/heads/main" --force
+            echo "synced=true" >> $GITHUB_OUTPUT
+            echo "✅ Source code mirrored to origin"
           else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "No new source changes"
+            echo "ℹ️  Source code already in sync"
+            echo "synced=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Create Pull Request
-        if: steps.check.outputs.has_changes == 'true'
-        uses: peter-evans/create-pull-request@v8
-        with:
-          token: ${{ secrets.PAT_TOKEN }}
-          branch: sync/upstream
-          delete-branch: true
-          title: 'chore: sync from upstream'
-          body: |
-            Automated sync from upstream.
-
-            - **Upstream**: ${{ env.UPSTREAM_URL }}
-            - **Upstream SHA**: ${{ steps.check.outputs.upstream_sha }}
-            - **Current SHA**: ${{ steps.check.outputs.origin_sha }}
-          labels: sync, automated
-          commit-message: 'chore: sync from upstream'
-          committer: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
-          author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
-          base: main
 
       - name: Summary
         run: |
@@ -134,9 +113,9 @@ jobs:
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Upstream | \`xzydm/proxysql-admin-webui\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Upstream SHA | \`${{ steps.check.outputs.upstream_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Current SHA | \`${{ steps.check.outputs.origin_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Source changed | ${{ steps.check.outputs.has_changes }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Upstream SHA | \`${{ steps.source.outputs.upstream_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Origin SHA | \`${{ steps.source.outputs.origin_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Source synced | ${{ steps.source.outputs.synced }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tags synced | ${{ steps.tags.outputs.count }} |" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.tags.outputs.count }}" -gt 0 ]; then
             echo "| New tags | ${{ steps.tags.outputs.list }} |" >> $GITHUB_STEP_SUMMARY

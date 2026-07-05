@@ -2,7 +2,7 @@
 
 > **版本**: v1.0.0  
 > **更新日期**: 2026-07-04  
-> **向导总数**: 63 个（W01-W63），全部已实现  
+> **向导总数**: 70 个（W01-W70），全部已实现  
 > **模板**: 1 个快速部署模板（T01），支持 5 种架构模式  
 > **语言**: 简体中文
 
@@ -13,10 +13,10 @@
 - [1. 向导系统介绍](#1-向导系统介绍)
 - [2. 向导引擎架构（简化）](#2-向导引擎架构简化)
 - [3. 完整向导目录](#3-完整向导目录)
-  - [3.1 后端服务器管理 (W01-W08)](#31-后端服务器管理-w01-w08)
-  - [3.2 后端用户管理 (W09-W15)](#32-后端用户管理-w09-w15)
-  - [3.3 查询路由规则 (W16-W23)](#33-查询路由规则-w16-w23)
-  - [3.4 复制与集群拓扑 (W24-W28)](#34-复制与集群拓扑-w24-w28)
+  - [3.1 后端服务器管理 (W01-W08, W64-W65)](#31-后端服务器管理-w01-w08-w64-w65)
+  - [3.2 后端用户管理 (W09-W15, W66-W68)](#32-后端用户管理-w09-w15-w66-w68)
+  - [3.3 查询路由规则 (W16-W23, W69)](#33-查询路由规则-w16-w23-w69)
+  - [3.4 复制与集群拓扑 (W24-W28, W70)](#34-复制与集群拓扑-w24-w28-w70)
   - [3.5 系统配置 (W29-W42)](#35-系统配置-w29-w42)
   - [3.6 防火墙与安全 (W43-W45)](#36-防火墙与安全-w43-w45)
   - [3.7 运维与配置同步 (W46-W52)](#37-运维与配置同步-w46-w52)
@@ -85,13 +85,13 @@
 - **`WizardField`**：定义向导表单的单个字段（名称、类型、默认值、验证规则）
 - **`WizardDefinition`**：定义向导的元数据（ID、分类、名称、描述、字段列表、目标表）
 - **`BaseWizard`**：所有向导的抽象基类，定义了 `validate()` 和 `generate_sql()` 接口
-- **`WizardEngine`**：向导注册中心和调度器，管理所有 63 个向导
+- **`WizardEngine`**：向导注册中心和调度器，管理所有 70 个向导
 
 ---
 
 ## 3. 完整向导目录
 
-### 3.1 后端服务器管理 (W01-W08)
+### 3.1 后端服务器管理 (W01-W08, W64-W65)
 
 #### W01 — 添加 MySQL 后端服务器
 
@@ -330,7 +330,61 @@ FROM stats_mysql_connection_pool WHERE hostgroup = 0 AND srv_host = '10.0.0.1' A
 
 ---
 
-### 3.2 后端用户管理 (W09-W15)
+#### W64 — 删除 MySQL 后端服务器
+
+- **类别**：后端服务器管理
+- **用途**：从 `mysql_servers` 表永久删除一台 MySQL 后端服务器
+- **何时使用**：服务器永久下线、替换或清理
+- **前置条件**：确认服务器不再需要
+
+> ⚠ **危险操作**：删除后不可恢复（除非有 W48 备份）。建议先用 W05 设置为 OFFLINE_SOFT 观察一段时间。
+
+**输入字段：**
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| hostgroup_id | number | 是 | — | 主机组 |
+| hostname | text | 是 | — | 主机名 |
+| port | number | 是 | 3306 | 端口 |
+| confirm_delete | checkbox | 是 | false | 确认删除（安全确认） |
+
+**生成 SQL 示例：**
+```sql
+DELETE FROM mysql_servers WHERE hostgroup_id = 0 AND hostname = '10.0.0.1' AND port = 3306
+```
+
+**相关向导**：W01（添加服务器）、W05（上下线）、W48（配置备份）
+
+---
+
+#### W65 — 删除 PostgreSQL 后端服务器
+
+- **类别**：后端服务器管理
+- **用途**：从 `pgsql_servers` 表永久删除一台 PostgreSQL 后端服务器
+- **何时使用**：PostgreSQL 服务器永久下线或替换
+- **前置条件**：确认服务器不再需要
+
+> ⚠ **危险操作**：删除后不可恢复。
+
+**输入字段：**
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| hostgroup_id | number | 是 | — | 主机组 |
+| hostname | text | 是 | — | 主机名 |
+| port | number | 是 | 5432 | 端口 |
+| confirm_delete | checkbox | 是 | false | 确认删除 |
+
+**生成 SQL 示例：**
+```sql
+DELETE FROM pgsql_servers WHERE hostgroup_id = 0 AND hostname = '10.0.0.1' AND port = 5432
+```
+
+**相关向导**：W02（添加 PG 服务器）、W48（配置备份）
+
+---
+
+### 3.2 后端用户管理 (W09-W15, W66-W68)
 
 #### W09 — 创建 MySQL 后端用户
 
@@ -542,7 +596,84 @@ VALUES ('app_user', 'password', 1, 0, 0, 1, 10000, 'backend direction')
 
 ---
 
-### 3.3 查询路由规则 (W16-W23)
+#### W66 — 删除 MySQL 后端用户
+
+- **类别**：后端用户管理
+- **用途**：从 ProxySQL 永久删除 MySQL 用户记录及关联的 LDAP 映射和快速路由条目
+- **何时使用**：不再需要该用户访问 ProxySQL
+- **前置条件**：先用 W13 禁用用户确认无影响
+
+> ⚠ **危险操作**：此操作同时清理 `mysql_users`、`mysql_ldap_mapping`、`mysql_query_rules_fast_routing` 中关联该用户的所有记录。不会删除后端 MySQL 上实际的用户账号。
+
+**输入字段：**
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| username | text | 是 | — | 要删除的用户名 |
+| confirm_delete | checkbox | 是 | false | 确认删除 |
+
+**生成 SQL 示例：**
+```sql
+DELETE FROM mysql_users WHERE username = 'app_user';
+DELETE FROM mysql_ldap_mapping WHERE backend_entity = 'app_user';
+DELETE FROM mysql_query_rules_fast_routing WHERE username = 'app_user';
+```
+
+**相关向导**：W09（创建用户）、W13（禁用用户）、W69（删除查询规则）
+
+---
+
+#### W67 — 删除 PostgreSQL 后端用户
+
+- **类别**：后端用户管理
+- **用途**：从 ProxySQL 永久删除 PostgreSQL 用户记录
+- **何时使用**：不再需要该用户
+
+> ⚠ **危险操作**：不会删除后端 PostgreSQL 上实际的角色（需单独处理）。
+
+**输入字段：**
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| username | text | 是 | — | 用户名 |
+| confirm_delete | checkbox | 是 | false | 确认删除 |
+
+**生成 SQL 示例：**
+```sql
+DELETE FROM pgsql_users WHERE username = 'pg_user'
+```
+
+**相关向导**：W10（创建 PG 用户）
+
+---
+
+#### W68 — 删除 LDAP 用户映射
+
+- **类别**：后端用户管理
+- **用途**：删除 LDAP 用户到 MySQL 后端的映射关系
+- **何时使用**：LDAP 集成变更
+
+> ⚠ 只删除映射关系，不影响 LDAP 或 MySQL 账号本身。
+
+**输入字段：**
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| priority | number | 是 | — | 优先级 |
+| frontend_entity | text | 是 | — | 前端实体 |
+| backend_entity | text | 是 | — | 后端实体 |
+| confirm_delete | checkbox | 是 | false | 确认删除 |
+
+**生成 SQL 示例：**
+```sql
+DELETE FROM mysql_ldap_mapping WHERE priority = 1 AND frontend_entity = 'cn=db_users' AND backend_entity = 'app_user'
+```
+
+**相关向导**：W14（添加映射）、W66（删除用户）
+
+---
+
+### 3.3 查询路由规则 (W16-W23, W69)
 
 #### W16 — 读写分离快速设置
 
@@ -800,7 +931,32 @@ VALUES (600, 1, '^UPDATE', 1, 1, 'Log all UPDATE queries')
 
 ---
 
-### 3.4 复制与集群拓扑 (W24-W28)
+#### W69 — 删除查询路由规则
+
+- **类别**：查询路由规则
+- **用途**：从 `mysql_query_rules` 表中按 rule_id 永久删除一条规则
+- **何时使用**：不再需要的路由、缓存、重写或日志规则
+- **前置条件**：先用 W55 确认规则未被使用
+
+> ⚠ **危险操作**：删除关键规则（如读写分离中的 SELECT 路由）可能导致查询路由异常。
+
+**输入字段：**
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| rule_id | number | 是 | — | 要删除的规则 ID |
+| confirm_delete | checkbox | 是 | false | 确认删除 |
+
+**生成 SQL 示例：**
+```sql
+DELETE FROM mysql_query_rules WHERE rule_id = 100
+```
+
+**相关向导**：W17（添加规则）、W55（规则命中统计）、W66（删除用户）
+
+---
+
+### 3.4 复制与集群拓扑 (W24-W28, W70)
 
 #### W24 — 配置主从复制
 
@@ -945,6 +1101,43 @@ VALUES (0, 1, 'read_only', 'pgsql-replication')
 ```
 
 **相关向导**：W02（添加 PgSQL 服务器）、W10（创建 PgSQL 用户）
+
+---
+
+#### W70 — 删除复制/集群配置
+
+- **类别**：复制与集群拓扑
+- **用途**：从 ProxySQL 永久删除复制/集群主机组配置
+- **何时使用**：不再需要的集群架构
+- **前置条件**：确认不再需要自动故障转移
+
+> ⚠ **危险操作**：删除后自动 read_only 检测和故障转移将停止。服务器仍在主机组中但不会自动切换。
+
+**支持的复制表：**
+
+| 表名 | 说明 |
+|------|------|
+| mysql_replication_hostgroups | MySQL 传统主从复制 |
+| mysql_group_replication_hostgroups | MySQL Group Replication |
+| mysql_galera_hostgroups | Galera Cluster |
+| mysql_aws_aurora_hostgroups | AWS Aurora |
+| pgsql_replication_hostgroups | PostgreSQL 复制 |
+
+**输入字段：**
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| target_table | select | 是 | — | 复制表类型 |
+| writer_hostgroup | number | 是 | — | 写主机组 |
+| reader_hostgroup | number（仅复制类） | 否 | — | 读主机组（主从/PgSQL 复制需要） |
+| confirm_delete | checkbox | 是 | false | 确认删除 |
+
+**生成 SQL 示例：**
+```sql
+DELETE FROM mysql_replication_hostgroups WHERE writer_hostgroup = 0 AND reader_hostgroup = 1
+```
+
+**相关向导**：W24-W28（各类复制配置）、W16（读写分离）、W69（删除查询规则）
 
 ---
 
@@ -1815,7 +2008,7 @@ SELECT hostname, port, weight, comment, status FROM stats_proxysql_servers_statu
 
 ## 4. 快速部署模板（T01）
 
-除了 63 个独立向导外，系统还提供了一个**快速部署模板**，将多个向导串联为一个完整的工作流。
+除了 70 个独立向导外，系统还提供了一个**快速部署模板**，将多个向导串联为一个完整的工作流。
 
 ### 4.1 模板概述
 

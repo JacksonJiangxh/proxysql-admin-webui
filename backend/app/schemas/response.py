@@ -79,8 +79,8 @@ class HealthResponse(BaseModel):
         examples=["ok", "error"],
     )
     version: str = Field(
-        default="1.0.0",
-        description="Application version.",
+        default="0.0.0",
+        description="Application version (read from VERSION file at runtime).",
     )
 
 

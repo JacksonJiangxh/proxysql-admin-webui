@@ -1,6 +1,42 @@
-"""W03, W06-W08: Backend server management wizards."""
+"""W03, W06-W08, W64-W65: Backend server management wizards."""
 from app.services.wizard_engine import BaseWizard, WizardDefinition, WizardField, _quote_val
 from app.services.proxysql import proxysql_service
+
+
+class DeleteMysqlServerWizard(BaseWizard):
+    """W64: Delete a MySQL backend server from mysql_servers."""
+
+    def validate(self, fields: dict) -> list[str]:
+        errors = []
+        if fields.get("hostgroup_id") is None:
+            errors.append("hostgroup_id is required to identify the server")
+        if not fields.get("hostname"):
+            errors.append("hostname is required to identify the server")
+        return errors
+
+    def generate_sql(self, fields: dict) -> list[str]:
+        where = (f"hostgroup_id = {int(fields['hostgroup_id'])} "
+                 f"AND hostname = {_quote_val(fields['hostname'])} "
+                 f"AND port = {int(fields.get('port', 3306))}")
+        return [f"DELETE FROM mysql_servers WHERE {where}"]
+
+
+class DeletePgsqlServerWizard(BaseWizard):
+    """W65: Delete a PostgreSQL backend server from pgsql_servers."""
+
+    def validate(self, fields: dict) -> list[str]:
+        errors = []
+        if fields.get("hostgroup_id") is None:
+            errors.append("hostgroup_id is required to identify the server")
+        if not fields.get("hostname"):
+            errors.append("hostname is required to identify the server")
+        return errors
+
+    def generate_sql(self, fields: dict) -> list[str]:
+        where = (f"hostgroup_id = {int(fields['hostgroup_id'])} "
+                 f"AND hostname = {_quote_val(fields['hostname'])} "
+                 f"AND port = {int(fields.get('port', 5432))}")
+        return [f"DELETE FROM pgsql_servers WHERE {where}"]
 
 
 class BatchImportServersWizard(BaseWizard):
@@ -278,4 +314,67 @@ DEFINITIONS = {
             WizardField("port", "Port (optional)", "number"),
         ], status="implemented",
     ), BackendConnectionTestWizard),
+
+    "W64": (WizardDefinition(
+        id="W64", category="backend_servers", name="Delete MySQL Backend Server",
+        description="Remove a MySQL backend server entry from the mysql_servers table",
+        icon="trash", target_table="mysql_servers", auto_apply_module="MYSQL SERVERS",
+        guide=(
+            "⚠ DANGER: This permanently removes the server from ProxySQL.\n"
+            "The server identified by hostgroup_id + hostname + port will\n"
+            "be deleted from mysql_servers immediately.\n\n"
+            "Before deleting:\n"
+            "1. Consider using W05 to set OFFLINE_SOFT first\n"
+            "2. Verify no active connections exist (check W08)\n"
+            "3. Confirm this server is no longer needed in the topology"
+        ),
+        fields=[
+            WizardField("_lookup", "Select Server to Delete (auto-fill)", "lookup",
+                        lookup={
+                            "table": "mysql_servers",
+                            "label_template": "hg={hostgroup_id} | {hostname}:{port} | {status}",
+                            "linked_fields": {
+                                "hostgroup_id": "hostgroup_id",
+                                "hostname": "hostname",
+                                "port": "port",
+                            },
+                        }),
+            WizardField("hostgroup_id", "Hostgroup", "number", required=True),
+            WizardField("hostname", "Hostname", "text", required=True),
+            WizardField("port", "Port", "number", required=True, default=3306),
+            WizardField("confirm_delete", "I confirm I want to DELETE this server",
+                        "checkbox", required=True, default=False),
+        ], status="implemented",
+    ), DeleteMysqlServerWizard),
+
+    "W65": (WizardDefinition(
+        id="W65", category="backend_servers", name="Delete PostgreSQL Backend Server",
+        description="Remove a PostgreSQL backend server entry from the pgsql_servers table",
+        icon="trash", target_table="pgsql_servers", auto_apply_module="PGSQL SERVERS",
+        guide=(
+            "⚠ DANGER: This permanently removes the server from ProxySQL.\n"
+            "The server identified by hostgroup_id + hostname + port will\n"
+            "be deleted from pgsql_servers immediately.\n\n"
+            "Before deleting:\n"
+            "1. Verify no active connections exist\n"
+            "2. Confirm this server is no longer needed in the topology"
+        ),
+        fields=[
+            WizardField("_lookup", "Select Server to Delete (auto-fill)", "lookup",
+                        lookup={
+                            "table": "pgsql_servers",
+                            "label_template": "hg={hostgroup_id} | {hostname}:{port} | {status}",
+                            "linked_fields": {
+                                "hostgroup_id": "hostgroup_id",
+                                "hostname": "hostname",
+                                "port": "port",
+                            },
+                        }),
+            WizardField("hostgroup_id", "Hostgroup", "number", required=True),
+            WizardField("hostname", "Hostname", "text", required=True),
+            WizardField("port", "Port", "number", required=True, default=5432),
+            WizardField("confirm_delete", "I confirm I want to DELETE this server",
+                        "checkbox", required=True, default=False),
+        ], status="implemented",
+    ), DeletePgsqlServerWizard),
 }

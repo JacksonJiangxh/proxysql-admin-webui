@@ -115,6 +115,35 @@ $:
             echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
             echo "🔨 Building proxysql-admin-webui ${TAG} (linux/amd64) …"
 
+            # ── Version file consistency check ──────────────────────
+            echo "📋 Checking VERSION file vs tag …"
+            if [ -f VERSION ]; then
+              FILE_VER=$(cat VERSION | tr -d '[:space:]')
+              if [ "$FILE_VER" != "$TAG" ]; then
+                echo "⚠️  VERSION file (${FILE_VER}) ≠ tag (${TAG}) — updating VERSION file"
+                echo "$TAG" > VERSION
+              else
+                echo "✅ VERSION file (${FILE_VER}) matches tag (${TAG})"
+              fi
+            else
+              echo "⚠️  VERSION file missing — creating with tag version (${TAG})"
+              echo "$TAG" > VERSION
+            fi
+
+            # ── Sync frontend/package.json version ──────────────────
+            if [ -f frontend/package.json ]; then
+              echo "📦 Syncing frontend/package.json version → ${TAG}"
+              python -c "
+import json
+with open('frontend/package.json') as f:
+    pkg = json.load(f)
+pkg['version'] = '${TAG}'
+with open('frontend/package.json', 'w') as f:
+    json.dump(pkg, f, indent=2)
+    f.write('\n')
+"
+            fi
+
             cd frontend
             npm ci
             npm run build
@@ -126,6 +155,7 @@ $:
             pyinstaller \
               --onefile \
               --name "proxysql-admin-webui" \
+              --add-data "VERSION:." \
               --add-data "frontend/dist:frontend/dist" \
               --hidden-import uvicorn.logging \
               --hidden-import uvicorn.loops.auto \
@@ -173,6 +203,35 @@ $:
             echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
             echo "🔨 Building proxysql-admin-webui ${TAG} (linux/arm64) …"
 
+            # ── Version file consistency check ──────────────────────
+            echo "📋 Checking VERSION file vs tag …"
+            if [ -f VERSION ]; then
+              FILE_VER=$(cat VERSION | tr -d '[:space:]')
+              if [ "$FILE_VER" != "$TAG" ]; then
+                echo "⚠️  VERSION file (${FILE_VER}) ≠ tag (${TAG}) — updating VERSION file"
+                echo "$TAG" > VERSION
+              else
+                echo "✅ VERSION file (${FILE_VER}) matches tag (${TAG})"
+              fi
+            else
+              echo "⚠️  VERSION file missing — creating with tag version (${TAG})"
+              echo "$TAG" > VERSION
+            fi
+
+            # ── Sync frontend/package.json version ──────────────────
+            if [ -f frontend/package.json ]; then
+              echo "📦 Syncing frontend/package.json version → ${TAG}"
+              python -c "
+import json
+with open('frontend/package.json') as f:
+    pkg = json.load(f)
+pkg['version'] = '${TAG}'
+with open('frontend/package.json', 'w') as f:
+    json.dump(pkg, f, indent=2)
+    f.write('\n')
+"
+            fi
+
             cd frontend
             npm ci
             npm run build
@@ -184,6 +243,7 @@ $:
             pyinstaller \
               --onefile \
               --name "proxysql-admin-webui" \
+              --add-data "VERSION:." \
               --add-data "frontend/dist:frontend/dist" \
               --hidden-import uvicorn.logging \
               --hidden-import uvicorn.loops.auto \
@@ -229,6 +289,21 @@ $:
             echo "##[set-output VERSION_MAJOR=${TAG%%.*}]"
             echo "##[set-output VERSION_MINOR=${TAG%.*}]"
             echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
+
+            # ── Version file consistency check ──────────────────────
+            echo "📋 Checking VERSION file vs tag (${TAG}) …"
+            if [ -f VERSION ]; then
+              FILE_VER=$(cat VERSION | tr -d '[:space:]')
+              if [ "$FILE_VER" != "$TAG" ]; then
+                echo "⚠️  VERSION file (${FILE_VER}) ≠ tag (${TAG}) — updating VERSION file"
+                echo "$TAG" > VERSION
+              else
+                echo "✅ VERSION file (${FILE_VER}) matches tag (${TAG})"
+              fi
+            else
+              echo "⚠️  VERSION file missing — creating with tag version (${TAG})"
+              echo "$TAG" > VERSION
+            fi
           exports:
             VERSION: VERSION
             VERSION_MAJOR: VERSION_MAJOR
@@ -258,6 +333,21 @@ $:
             echo "##[set-output VERSION_MAJOR=${TAG%%.*}]"
             echo "##[set-output VERSION_MINOR=${TAG%.*}]"
             echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
+
+            # ── Version file consistency check ──────────────────────
+            echo "📋 Checking VERSION file vs tag (${TAG}) …"
+            if [ -f VERSION ]; then
+              FILE_VER=$(cat VERSION | tr -d '[:space:]')
+              if [ "$FILE_VER" != "$TAG" ]; then
+                echo "⚠️  VERSION file (${FILE_VER}) ≠ tag (${TAG}) — updating VERSION file"
+                echo "$TAG" > VERSION
+              else
+                echo "✅ VERSION file (${FILE_VER}) matches tag (${TAG})"
+              fi
+            else
+              echo "⚠️  VERSION file missing — creating with tag version (${TAG})"
+              echo "$TAG" > VERSION
+            fi
           exports:
             VERSION: VERSION
             VERSION_MAJOR: VERSION_MAJOR
@@ -287,6 +377,21 @@ $:
             TAG="${CNB_BRANCH#v}"
             echo "##[set-output VERSION=${TAG}]"
             echo "##[set-output TAG_NAME=${CNB_BRANCH}]"
+
+            # ── Version file consistency check ──────────────────────
+            echo "📋 Checking VERSION file vs tag (${TAG}) …"
+            if [ -f VERSION ]; then
+              FILE_VER=$(cat VERSION | tr -d '[:space:]')
+              if [ "$FILE_VER" != "$TAG" ]; then
+                echo "⚠️  VERSION file (${FILE_VER}) ≠ tag (${TAG}) — updating VERSION file"
+                echo "$TAG" > VERSION
+              else
+                echo "✅ VERSION file (${FILE_VER}) matches tag (${TAG})"
+              fi
+            else
+              echo "⚠️  VERSION file missing — creating with tag version (${TAG})"
+              echo "$TAG" > VERSION
+            fi
           exports:
             VERSION: VERSION
             TAG_NAME: TAG_NAME

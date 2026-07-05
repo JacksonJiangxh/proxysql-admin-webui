@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
+from app.version import get_version
 from app.api.v1 import (
     auth, tables, sync, query, dashboard, users, servers, wizards,
     config_diff, clusters, templates, backup, export, scheduler,
@@ -51,7 +52,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ProxySQL Admin WebUI",
     description="Web-based management interface for ProxySQL",
-    version="1.0.0",
+    version=get_version(),
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
     lifespan=lifespan,
@@ -103,7 +104,7 @@ async def health_check():
 
     return {
         "status": "ok" if db_ok else "degraded",
-        "version": "1.0.0",
+        "version": get_version(),
         "database": "ok" if db_ok else "error",
     }
 
