@@ -130,20 +130,6 @@ $:
               echo "$TAG" > VERSION
             fi
 
-            # ── Sync frontend/package.json version ──────────────────
-            if [ -f frontend/package.json ]; then
-              echo "📦 Syncing frontend/package.json version → ${TAG}"
-              python -c "
-import json
-with open('frontend/package.json') as f:
-    pkg = json.load(f)
-pkg['version'] = '${TAG}'
-with open('frontend/package.json', 'w') as f:
-    json.dump(pkg, f, indent=2)
-    f.write('\n')
-"
-            fi
-
             cd frontend
             npm ci
             npm run build
@@ -216,20 +202,6 @@ with open('frontend/package.json', 'w') as f:
             else
               echo "⚠️  VERSION file missing — creating with tag version (${TAG})"
               echo "$TAG" > VERSION
-            fi
-
-            # ── Sync frontend/package.json version ──────────────────
-            if [ -f frontend/package.json ]; then
-              echo "📦 Syncing frontend/package.json version → ${TAG}"
-              python -c "
-import json
-with open('frontend/package.json') as f:
-    pkg = json.load(f)
-pkg['version'] = '${TAG}'
-with open('frontend/package.json', 'w') as f:
-    json.dump(pkg, f, indent=2)
-    f.write('\n')
-"
             fi
 
             cd frontend
